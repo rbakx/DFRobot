@@ -25,7 +25,7 @@
         var res = patt.exec(urlStr);
         var portNumberPlusOne = (parseInt(res[1]) + 1).toString(); // the first parenthesized substring matches is in index 1
         var newUrlStr = urlStr.replace(res[1],portNumberPlusOne);
-        document.getElementById("cam").src = newUrlStr + "javascript_simple.html"; // url of the webcam video page
+        document.getElementById("cam").src = newUrlStr + "stream_simple.html"; // url of the webcam video page
     } else {
         document.getElementById("error message").innerHTML = "cannot find webcam url"; // write error message the to page
     }
