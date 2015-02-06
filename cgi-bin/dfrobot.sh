@@ -14,28 +14,18 @@ function handle_command {
 if [ "$REQUEST_METHOD" = "POST" ]; then
     read POST_STRING
 
-    while true; do
-        HEX="$(echo "$POST_STRING" | sed 's/^.*[^%]%\([0-9a-fA-F][0-9a-fA-F]\).*/\1/')"
-        if [ "$HEX" = "$POST_STRING" ]; then
-            break;
-        fi
-        REP=$(echo -e \\x$HEX)
-        # to avoid mishandling of %25 (== '%') replace all occurences of the
-        # percent sign itself with a double percent sign (kind of escaping)
-        [ "$REP" = "%" ] && REP="%%"
-
-        POST_STRING="$(echo "$POST_STRING" | sed 's/^\(.*[^%]\)%\([0-9a-fA-F][0-9a-fA-F]\)/\1'$REP'/')"
-    done
-
     # replace all escaped percent signs with a single percent sign
     POST_STRING=$(echo $POST_STRING | sed 's/%%/%/g')
 
     # replace all ampersands with spaces for easier handling later
     POST_STRING=$(echo $POST_STRING | sed 's/&/ /g')
-    COMMAND="$(echo $POST_STRING | sed -n 's/^.*cmd=\([^ ]*\).*$/\1/p')"
-    # Now $COMMAND contains 'cmd=<value>' where 'cmd' and '<value>' correspond with the
-    # 'name' and 'value' attribute of the button pressed in the client side html file.
 
+    # Now $POST_STRING contains 'cmd=<value>' where 'cmd' and '<value>' correspond with the
+    # 'name' and 'value' attribute of the button pressed in the client side html file.
+    # Filter out <value> and store it in $COMMAND.
+    COMMAND="$(echo $POST_STRING | sed -n 's/^.*cmd=\([^ ]*\).*$/\1/p')"
+
+    # Call command handler.
     handle_command $COMMAND
 fi
 
