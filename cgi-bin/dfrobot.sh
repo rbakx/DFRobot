@@ -7,8 +7,13 @@ function handle_command {
     elif [ "${1}" == "stop_stream" ]
     then
         kill $(pgrep mjpg_streamer) > /dev/null 2>&1
+    elif [ "${1}" == "status" ]
+    then
+        do_update=true
     fi
 }
+
+do_update=false
 
 # CGI POST method handling code below taken from http://tuxx-home.at/cmt.php?article=/2005/06/17/T09_07_39/index.html
 if [ "$REQUEST_METHOD" = "POST" ]; then
@@ -40,6 +45,22 @@ fi
 #    The disadvantage that the new html content like the robot status is not updated.
 # The best option might be to use option 3 when no status update is needed else option 2.
 
-#echo $'Location: ../index1.html\n'
-echo $'Status:304\n'
+#echo -e "Location: ../index1.html\n"
+
+if [ $do_update = false ]
+then
+    echo -e "Status:304\n"
+else
+    # Get actual status so it can be sent to the web client.
+    status="<br>wifi level = $(/sbin/iwconfig | sed -n 's/^.*level=\([^ ]*\).*$/\1/p') dBm"
+
+    # Send 'index1.html' to the web client, after replacing the 'feedbackstring' with the actual status.
+    echo -e "Content-type: text/html\n"
+    while read line
+    do
+        # Replace 'feedbackstring' in original string with the actual status.
+        echo -e ${line/feedbackstring/$status}
+    done < /var/www/index1.html
+fi
+
 
