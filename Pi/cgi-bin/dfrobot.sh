@@ -7,6 +7,18 @@ function handle_command {
     elif [ "${1}" == "stop_stream" ]
     then
         kill $(pgrep mjpg_streamer) > /dev/null 2>&1
+    elif [ "${1}" == "forward" ]
+    then
+        i2c_cmd 1 > /dev/null 2>&1
+    elif [ "${1}" == "backward" ]
+    then
+        i2c_cmd 2 > /dev/null 2>&1
+    elif [ "${1}" == "left" ]
+    then
+        i2c_cmd 3 > /dev/null 2>&1
+    elif [ "${1}" == "right" ]
+    then
+        i2c_cmd 4 > /dev/null 2>&1
     elif [ "${1}" == "status" ]
     then
         do_update=true
