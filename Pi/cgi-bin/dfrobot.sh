@@ -19,6 +19,12 @@ function handle_command {
     elif [ "${1}" == "right" ]
     then
         i2c_cmd 4 > /dev/null 2>&1
+    elif [ "${1}" == "light-on" ]
+    then
+        i2c_cmd 10 > /dev/null 2>&1
+    elif [ "${1}" == "light-off" ]
+    then
+        i2c_cmd 11 > /dev/null 2>&1
     elif [ "${1}" == "status" ]
     then
         do_update=true
@@ -64,7 +70,7 @@ then
     echo -e "Status:304\n"
 else
     # Get actual status so it can be sent to the web client.
-    status="<br>wifi level = $(/sbin/iwconfig | sed -n 's/^.*level=\([^ ]*\).*$/\1/p') dBm"
+    status="<br>wifi level = $(/sbin/iwconfig | sed -n 's/^.*level=\([^ ]*\).*$/\1/p') dBm<br>Battery = $(i2c_cmd 0 | sed -n 's/^.*Received \([^ ]*\).*$/\1/p')"
 
     # Send 'index1.html' to the web client, after replacing the 'feedbackstring' with the actual status.
     echo -e "Content-type: text/html\n"

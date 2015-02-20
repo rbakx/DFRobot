@@ -8,13 +8,17 @@
 // www.dfrobot.com
 // Last modified on 24/12/2009
 
-int PWM1 = 5;  
-int PWM2 = 6;
 int DIR1 = 4;
+int PWM1 = 5;  
 int DIR2 = 7;
+int PWM2 = 6;
+int ANA0 = A0;
+// LIGHT and RESETCHARGE control the same relay
+int LIGHT = 2;
 int RESETCHARGE = 2;
 
-int i2cNumber = 0; // global variable receiving number from I2C
+int i2cNumber = 0; // global variable for receiving number from I2C
+int ana0Value = 0; // global variable for sending number to I2C
 unsigned long count = 0; // global variable counting the total number of loops
 
 // callback for received data
@@ -29,7 +33,7 @@ void receiveData(int byteCount)
 // callback for sending data
 void sendData()
 {
-  Wire.write(0);
+  Wire.write(ana0Value/4); // I2C only receives bytes, so map 0..1023 to 0..255
 }
 
 void Motor1(int pwm, boolean reverse)
@@ -60,8 +64,6 @@ void Motor2(int pwm, boolean reverse)
 
 void setup() 
 { 
-  pinMode(PWM1, OUTPUT);
-  pinMode(PWM2, OUTPUT);
   pinMode(DIR1, OUTPUT);
   pinMode(DIR2, OUTPUT);
   pinMode(RESETCHARGE, OUTPUT);
@@ -81,16 +83,16 @@ void loop()
   switch (i2cNumber)
   {
   case 1: // forward
-    Motor1(255, true);
-    Motor2(255, true);
+    Motor1(255, false);
+    Motor2(255, false);
     delay(1000);
     Motor1(0, true);
     Motor2(0, true);
     i2cNumber = 0;
     break;
-  case 2: // forward
-    Motor1(255, false);
-    Motor2(255, false);
+  case 2: // backward
+    Motor1(255, true);
+    Motor2(255, true);
     delay(1000);
     Motor1(0, false);
     Motor2(0, false);
@@ -99,7 +101,7 @@ void loop()
   case 3: // turn left
     Motor1(255, false);
     Motor2(255, true);
-    delay(1000);
+    delay(500);
     Motor1(0, true);
     Motor2(0, true);
     i2cNumber = 0;
@@ -107,15 +109,23 @@ void loop()
   case 4: // turn right
     Motor1(255, true);
     Motor2(255, false);
-    delay(1000);
+    delay(500);
     Motor1(0, true);
     Motor2(0, true);
     i2cNumber = 0;
+    break;
+  case 10: // light on
+    digitalWrite(LIGHT,HIGH);
+    break;
+  case 11: // light off
+    digitalWrite(LIGHT,LOW);
     break;
   default:
     i2cNumber = 0;
     break;
   }
+
+  ana0Value = analogRead(ANA0); 
 
   delay(100);
   count = count + 1;
@@ -128,6 +138,7 @@ void loop()
     count = 0;
   }
 }
+
 
 
 
