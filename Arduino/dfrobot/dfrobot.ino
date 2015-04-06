@@ -17,16 +17,24 @@ int ANA0 = A0;
 int LIGHT = 2;
 int RESETCHARGE = 2;
 
-int i2cNumber = 0; // global variable for receiving number from I2C
+int i2cCommand = 0; // global variable for receiving command from I2C
+int i2cParameter = 0; // global variable for receiving parameter from I2C
 int ana0Value = 0; // global variable for sending number to I2C
 unsigned long count = 0; // global variable counting the total number of loops
 
 // callback for received data
 void receiveData(int byteCount)
 {
+  int i2cData;
   while(Wire.available()) {
-    i2cNumber = Wire.read();
-
+    i2cData = Wire.read();
+  }
+  // All values below 128 are commands, else it is a parameter.
+  if (i2cData < 128) {
+    i2cCommand = i2cData;
+  }
+  else {
+    i2cParameter = i2cData;
   }
 }
 
@@ -80,48 +88,65 @@ void setup()
 
 void loop() 
 { 
-  switch (i2cNumber)
+  switch (i2cCommand)
   {
   case 1: // forward
-    Motor1(255, false);
-    Motor2(255, false);
-    delay(1000);
-    Motor1(0, true);
-    Motor2(0, true);
-    i2cNumber = 0;
+    if (i2cParameter >=128) {
+      int ms = i2cParameter == 128 ? 200 : 1000;
+      Motor1(255, false);
+      Motor2(255, false);
+      delay(ms);
+      Motor1(0, true);
+      Motor2(0, true);
+      i2cCommand = 0;
+      i2cParameter = 0;
+    }
     break;
   case 2: // backward
-    Motor1(255, true);
-    Motor2(255, true);
-    delay(1000);
-    Motor1(0, false);
-    Motor2(0, false);
-    i2cNumber = 0;
+    if (i2cParameter >=128) {
+      int ms = i2cParameter == 128 ? 200 : 1000;
+      Motor1(255, true);
+      Motor2(255, true);
+      delay(ms);
+      Motor1(0, false);
+      Motor2(0, false);
+      i2cCommand = 0;
+      i2cParameter = 0;
+    }
     break;
   case 3: // turn left
-    Motor1(255, false);
-    Motor2(255, true);
-    delay(500);
-    Motor1(0, true);
-    Motor2(0, true);
-    i2cNumber = 0;
+    if (i2cParameter >=128) {
+      int ms = i2cParameter == 128 ? 100 : 400;
+      Motor1(255, false);
+      Motor2(255, true);
+      delay(ms);
+      Motor1(0, true);
+      Motor2(0, true);
+      i2cCommand = 0;
+      i2cParameter = 0;
+    }
     break;
   case 4: // turn right
-    Motor1(255, true);
-    Motor2(255, false);
-    delay(500);
-    Motor1(0, true);
-    Motor2(0, true);
-    i2cNumber = 0;
+    if (i2cParameter >=128) {
+      int ms = i2cParameter == 128 ? 100 : 400;
+      Motor1(255, true);
+      Motor2(255, false);
+      delay(ms);
+      Motor1(0, true);
+      Motor2(0, true);
+      i2cCommand = 0;
+      i2cParameter = 0;
+    }
     break;
   case 10: // light on
     digitalWrite(LIGHT,HIGH);
+    i2cCommand = 0;
     break;
   case 11: // light off
     digitalWrite(LIGHT,LOW);
+    i2cCommand = 0;
     break;
   default:
-    i2cNumber = 0;
     break;
   }
 
@@ -138,6 +163,7 @@ void loop()
     count = 0;
   }
 }
+
 
 
 

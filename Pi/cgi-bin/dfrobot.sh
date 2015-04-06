@@ -9,16 +9,16 @@ function handle_command {
         kill $(pgrep mjpg_streamer) > /dev/null 2>&1
     elif [ "${1}" == "forward" ]
     then
-        i2c_cmd 1 > /dev/null 2>&1
+        i2c_cmd 1 ${2} > /dev/null 2>&1
     elif [ "${1}" == "backward" ]
     then
-        i2c_cmd 2 > /dev/null 2>&1
+        i2c_cmd 2 ${2} > /dev/null 2>&1
     elif [ "${1}" == "left" ]
     then
-        i2c_cmd 3 > /dev/null 2>&1
+        i2c_cmd 3 ${2} > /dev/null 2>&1
     elif [ "${1}" == "right" ]
     then
-        i2c_cmd 4 > /dev/null 2>&1
+        i2c_cmd 4 ${2} > /dev/null 2>&1
     elif [ "${1}" == "light-on" ]
     then
         i2c_cmd 10 > /dev/null 2>&1
@@ -46,10 +46,12 @@ if [ "$REQUEST_METHOD" = "POST" ]; then
     # Now $POST_STRING contains 'cmd=<value>' where 'cmd' and '<value>' correspond with the
     # 'name' and 'value' attribute of the button pressed in the client side html file.
     # Filter out <value> and store it in $COMMAND.
-    COMMAND="$(echo $POST_STRING | sed -n 's/^.*cmd=\([^ ]*\).*$/\1/p')"
+    COMMAND_PLUS_PARAMETER="$(echo $POST_STRING | sed -n 's/^.*cmd=\([^ ]*\).*$/\1/p')"
+    COMMAND="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/\([^.]*\).*$/\1/p')"
+    PARAMETER="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/[^.]*\.\(.*$\)/\1/p')"
 
     # Call command handler.
-    handle_command $COMMAND
+    handle_command $COMMAND $PARAMETER
 fi
 
 # Now we must return a valid HTTP header to the client, otherwise an "Internal Server Error" will be generated.
