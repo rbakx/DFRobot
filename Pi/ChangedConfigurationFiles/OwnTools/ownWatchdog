@@ -1,0 +1,22 @@
+#!/bin/sh
+# Start with a touch of this script to feed the watchdog daemon a.s.a.p.
+touch -m $0
+while [ 1 ]
+do
+ # Start with a sleep to give network time to come up.
+ echo going to sleep
+ sleep 10
+ # Check for router and Android Wifi hotspot
+ if [ "$(ping -c 1 -W 2 192.168.1.254 | grep '100% packet loss')" -a "$(ping -c 1 -W 2 192.168.43.1 | grep '100% packet loss')" ]
+ then
+  echo ping not ok, going to restart network
+  #sudo shutdown -r now
+  sudo ifconfig wlan0 down && sudo ifconfig wlan0 up
+  sudo /etc/init.d/networking restart
+  sudo dhclient wlan0
+ else
+  echo ping ok
+  # Touch this script  to feed the watchdog daemon.
+  touch -m $0
+ fi
+done
