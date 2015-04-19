@@ -24,8 +24,8 @@ int i2cParameter = 0; // global variable for receiving parameter from I2C
 int ana0Value = 0; // global variable for sending number to I2C
 unsigned long count = 0; // global variable counting the total number of loops
 
-Servo myservo;  // create servo object to control a servo
-int servoPos;   // variable to store the servo position 
+Servo myServo;  // create servo camera object to control a servo
+int servoCameraPos;   // variable to store the servo camera position 
 
 // callback for received data
 void receiveData(int byteCount)
@@ -89,7 +89,7 @@ void setup()
   Wire.onRequest(sendData);
 
   Serial.begin(9600);
-  servoPos = 0;
+  servoCameraPos = 0;
 } 
 
 void loop() 
@@ -145,21 +145,21 @@ void loop()
     }
     break;
   case 10: // servo for camera up
-    servoPos = min(servoPos + 30, 90);
-    myservo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object
-    myservo.write(servoPos);
+    servoCameraPos = min(servoCameraPos + 30, 90);
+    myServo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object
+    myServo.write(servoCameraPos);
     delay(500); // give servo time to react before detaching pin
     // Detach pin to make sure servo uses minimal current. The position of the servo is then not fixed anymore.
-    myservo.detach();
+    myServo.detach();
     i2cCommand = 0;
     break;
   case 11: // servo for camera down
-    servoPos = max(servoPos - 30, 0);
-    myservo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object 
-    myservo.write(servoPos);
+    servoCameraPos = max(servoCameraPos - 30, 0);
+    myServo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object 
+    myServo.write(servoCameraPos);
     delay(500); // give servo time to react before detaching pin
     // Detach pin to make sure servo uses minimal current. The position of the servo is then not fixed anymore.
-    myservo.detach();
+    myServo.detach();
     i2cCommand = 0;
     break;
   case 20: // light on
