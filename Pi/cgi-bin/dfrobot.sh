@@ -72,7 +72,8 @@ then
     echo -e "Status:304\n"
 else
     # Get actual status so it can be sent to the web client.
-    status="<br>wifi level = $(/sbin/iwconfig | sed -n 's/^.*level=\([^ ]*\).*$/\1/p') dBm<br>uptime = $(/usr/bin/uptime | sed -n 's/.*up \([^,]*\).*/\1/p')<br>battery = $(i2c_cmd 0 | sed -n 's/^.*Received \([^ ]*\).*$/\1/p') (154 = 6V)"
+    wifistatus=/sbin/iwconfig
+    status="<br>$($wifistatus | sed -n 's/^.*ESSID:"\([^"]*\).*$/\1/p') level = $($wifistatus | sed -n 's/^.*level=\([^ ]*\).*$/\1/p') dBm<br>uptime = $(/usr/bin/uptime | sed -n 's/.*up \([^,]*\).*/\1/p')<br>battery = $(i2c_cmd 0 | sed -n 's/^.*Received \([^ ]*\).*$/\1/p') (154 = 6V)"
 
     # Send 'index1.html' to the web client, after replacing the 'feedbackstring' with the actual status.
     echo -e "Content-type: text/html\n"
@@ -80,7 +81,7 @@ else
     do
         # Replace 'feedbackstring' in original string with the actual status.
         echo -e ${line/feedbackstring/$status}
-done < ${1}
+    done < ${1}
 fi
 
 
