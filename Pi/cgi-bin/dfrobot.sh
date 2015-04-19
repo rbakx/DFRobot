@@ -19,12 +19,18 @@ function handle_command {
     elif [ "${1}" == "right" ]
     then
         i2c_cmd 4 ${2} > /dev/null 2>&1
-    elif [ "${1}" == "light-on" ]
+    elif [ "${1}" == "cam-up" ]
     then
         i2c_cmd 10 > /dev/null 2>&1
-    elif [ "${1}" == "light-off" ]
+    elif [ "${1}" == "cam-down" ]
     then
         i2c_cmd 11 > /dev/null 2>&1
+    elif [ "${1}" == "light-on" ]
+    then
+        i2c_cmd 20 > /dev/null 2>&1
+    elif [ "${1}" == "light-off" ]
+    then
+        i2c_cmd 21 > /dev/null 2>&1
     elif [ "${1}" == "status" ]
     then
         do_update=true

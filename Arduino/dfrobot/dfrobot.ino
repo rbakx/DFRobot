@@ -1,4 +1,5 @@
 #include <Wire.h>
+#include <Servo.h>
 #define SLAVE_ADDRESS 0x04
 
 //This motor shield use Pin 6,5,7,4 to control the motor
@@ -13,6 +14,7 @@ int PWM1 = 5;
 int DIR2 = 7;
 int PWM2 = 6;
 int ANA0 = A0;
+int SERVOCAMERA = 8;
 // LIGHT and RESETCHARGE control the same relay
 int LIGHT = 2;
 int RESETCHARGE = 2;
@@ -21,6 +23,9 @@ int i2cCommand = 0; // global variable for receiving command from I2C
 int i2cParameter = 0; // global variable for receiving parameter from I2C
 int ana0Value = 0; // global variable for sending number to I2C
 unsigned long count = 0; // global variable counting the total number of loops
+
+Servo myservo;  // create servo object to control a servo
+int servoPos;   // variable to store the servo position 
 
 // callback for received data
 void receiveData(int byteCount)
@@ -83,7 +88,8 @@ void setup()
   Wire.onReceive(receiveData);
   Wire.onRequest(sendData);
 
-  Serial.begin(9600);   
+  Serial.begin(9600);
+  servoPos = 0;
 } 
 
 void loop() 
@@ -138,11 +144,29 @@ void loop()
       i2cParameter = 0;
     }
     break;
-  case 10: // light on
+  case 10: // servo for camera up
+    servoPos = min(servoPos + 30, 90);
+    myservo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object
+    myservo.write(servoPos);
+    delay(500); // give servo time to react before detaching pin
+    // Detach pin to make sure servo uses minimal current. The position of the servo is then not fixed anymore.
+    myservo.detach();
+    i2cCommand = 0;
+    break;
+  case 11: // servo for camera down
+    servoPos = max(servoPos - 30, 0);
+    myservo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object 
+    myservo.write(servoPos);
+    delay(500); // give servo time to react before detaching pin
+    // Detach pin to make sure servo uses minimal current. The position of the servo is then not fixed anymore.
+    myservo.detach();
+    i2cCommand = 0;
+    break;
+  case 20: // light on
     digitalWrite(LIGHT,HIGH);
     i2cCommand = 0;
     break;
-  case 11: // light off
+  case 21: // light off
     digitalWrite(LIGHT,LOW);
     i2cCommand = 0;
     break;
