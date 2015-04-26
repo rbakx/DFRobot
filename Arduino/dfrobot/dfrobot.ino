@@ -14,10 +14,10 @@ int PWM1 = 5;
 int DIR2 = 7;
 int PWM2 = 6;
 int ANA0 = A0;
-int SERVOCAMERA = 8;
 // LIGHT and RESETCHARGE control the same relay
 int LIGHT = 2;
 int RESETCHARGE = 2;
+int SERVOCAMERA = 3;
 
 int i2cCommand = 0; // global variable for receiving command from I2C
 int i2cParameter = 0; // global variable for receiving parameter from I2C
