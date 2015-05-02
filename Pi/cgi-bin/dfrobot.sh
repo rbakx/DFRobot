@@ -1,12 +1,30 @@
 #!/bin/bash
 
 function handle_command {
-    if [ "${1}" == "start_stream" ]
+    if [ "${1}" == "start-stream" ]
     then
         LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" > /dev/null 2>&1 &
-    elif [ "${1}" == "stop_stream" ]
+    elif [ "${1}" == "stop-stream" ]
     then
         kill $(pgrep mjpg_streamer) > /dev/null 2>&1
+    elif [ "${1}" == "capture-start" ]
+    then
+        # Start capture video, time limit is set to 1 minute.
+        raspivid -o /tmp/pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 > /dev/null 2>&1 &
+    elif [ "${1}" == "capture-stop" ]
+    then
+        killall raspivid
+        # Convert to mp4. Do wait for it to finish before starting the upload so no '&' at the end.
+        MP4Box -fps 30 -new -add /tmp/pivid.h264 /tmp/pivid.mp4 > /dev/null 2>&1
+        # Going to upload the file to Google Drive using the 'drive' utility.
+        # 'sudo -u www-data' is used here to behave as the exact same www-data user
+        # as when the verification code was generated (using also sudo -u),
+        # else Google will ask for a new verification code.
+        # Apparently when Apache uses www-data it is different in a way.
+        sudo -u www-data drive upload -f /tmp/pivid.mp4 > /dev/null 2>&1 &
+    elif [ "${1}" == "home" ]
+    then
+        echo hello
     elif [ "${1}" == "forward" ]
     then
         i2c_cmd 1 ${2} > /dev/null 2>&1
