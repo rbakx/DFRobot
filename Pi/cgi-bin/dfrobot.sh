@@ -10,18 +10,24 @@ function handle_command {
     elif [ "${1}" == "capture-start" ]
     then
         # Start capture video, time limit is set to 1 minute.
-        raspivid -o /tmp/pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 > /dev/null 2>&1 &
+        raspivid -o /tmp/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 > /dev/null 2>&1 &
     elif [ "${1}" == "capture-stop" ]
     then
         killall raspivid
         # Convert to mp4. Do wait for it to finish before starting the upload so no '&' at the end.
-        MP4Box -fps 30 -new -add /tmp/pivid.h264 /tmp/pivid.mp4 > /dev/null 2>&1
+        MP4Box -fps 30 -new -add /tmp/DFRobotUploads/dfrobot_pivid.h264 /tmp/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1
+        # Going to purge previously uploaded files to prevent filling up Google Drive. See below why 'sudo -u www-data' is used.
+        sudo -u www-data purgeDFRobotUploads
         # Going to upload the file to Google Drive using the 'drive' utility.
         # 'sudo -u www-data' is used here to behave as the exact same www-data user
         # as when the verification code was generated (using also sudo -u),
         # else Google will ask for a new verification code.
         # Apparently when Apache uses www-data it is different in a way.
-        sudo -u www-data drive upload -f /tmp/pivid.mp4 > /dev/null 2>&1 &
+        # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
+        # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
+        # This id can be obtained using 'drive list -t DFRobotUploads'.
+        # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
+        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /tmp/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1 &
     elif [ "${1}" == "home" ]
     then
         echo hello

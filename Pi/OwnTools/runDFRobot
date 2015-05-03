@@ -1,0 +1,24 @@
+#!/bin/bash
+# Note that when this script is run from cron, the  /usr/local/bin is not in the PATH variable.
+# $(basename $0) can be used to get the name of this script without any path prefix.
+
+# First check if there are active connections. If so, do not run this script.
+echo "***** log file created at $(date) *****" > /home/pi/log/$(basename $0)_log.txt
+if [ $(netstat | grep 44444 | wc -l) -gt 0 ]; then
+    echo "Not going to run because there are active connections" >> /home/pi/log/$(basename $0)_log.txt   
+    exit 0
+fi
+
+# Start with removing previous uploads to  Google Drive to prevent filling up Google Drive
+/usr/local/bin/purgeDFRobotUploads
+
+# Start capture video, time limit is set to 10 seconds.
+raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 10000 >> /home/pi/log/$(basename $0)_log.txt 2>&1
+# Convert to mp4. Do wait for it to finish before starting the upload so no '&' at the end.
+MP4Box -fps 30 -new -add /home/pi/DFRobotUploads/dfrobot_pivid.h264 /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/$(basename $0)_log.txt 2>&1
+# Going to upload the file to Google Drive using the 'drive' utility.
+# To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
+# When the 'DFRobotUploads' folder is changed, a new id has to be provided.
+# This id can be obtained using 'drive list -t DFRobotUploads'.
+# The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
+/usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/$(basename $0)_log.txt 2>&1 &
