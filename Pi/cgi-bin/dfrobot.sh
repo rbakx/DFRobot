@@ -1,21 +1,22 @@
 #!/bin/bash
 
 function handle_command {
+    echo "***** log file created at $(date) *****" > /home/pi/log/$(basename $0)_log.txt
     if [ "${1}" == "start-stream" ]
     then
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" > /dev/null 2>&1 &
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" >> /home/pi/log/$(basename $0)_log.txt 2>&1 &
     elif [ "${1}" == "stop-stream" ]
     then
         kill $(pgrep mjpg_streamer) > /dev/null 2>&1
     elif [ "${1}" == "capture-start" ]
     then
         # Start capture video, time limit is set to 1 minute.
-        raspivid -o /tmp/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 > /dev/null 2>&1 &
+        raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 >> /home/pi/log/$(basename $0)_log.txt 2>&1 &
     elif [ "${1}" == "capture-stop" ]
     then
         killall raspivid
         # Convert to mp4. Do wait for it to finish before starting the upload so no '&' at the end.
-        MP4Box -fps 30 -new -add /tmp/DFRobotUploads/dfrobot_pivid.h264 /tmp/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1
+        MP4Box -fps 30 -new -add /home/pi/DFRobotUploads/dfrobot_pivid.h264 /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/$(basename $0)_log.txt 2>&1
         # Going to purge previously uploaded files to prevent filling up Google Drive. See below why 'sudo -u www-data' is used.
         sudo -u www-data purgeDFRobotUploads
         # Going to upload the file to Google Drive using the 'drive' utility.
@@ -27,7 +28,7 @@ function handle_command {
         # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
         # This id can be obtained using 'drive list -t DFRobotUploads'.
         # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
-        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /tmp/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1 &
+        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/$(basename $0)_log.txt 2>&1 &
     elif [ "${1}" == "home" ]
     then
         echo hello
