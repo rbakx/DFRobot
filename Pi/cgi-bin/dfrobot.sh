@@ -3,7 +3,7 @@
 function handle_command {
     prompt=$(basename $0)
     # Reset the log file to zero length if the size gets too large.
-    if [ $(stat -c %s /home/pi/log/dfrobot_log.txt) -gt 100000 ]
+    if [ $(stat -c %s /home/pi/log/dfrobot_log.txt) -gt 1000000 ]
     then
         echo -e "***** $(date), $prompt: START LOG  *****" > /home/pi/log/dfrobot_log.txt
     else
@@ -13,7 +13,8 @@ function handle_command {
     if [ "${1}" == "start-stream" ]
     then
         echo "***** $(date), $prompt: 'start-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" >> /home/pi/log/dfrobot_log.txt 2>&1 &
+        # Do not write output to logfile but to /dev/null to prevent filling up.
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" > /dev/null 2>&1 &
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
@@ -23,14 +24,15 @@ function handle_command {
         echo "***** $(date), $prompt: 'capture-start' command received" >> /home/pi/log/dfrobot_log.txt
         # Start capture video, time limit is set to 1 minute.
         echo "***** $(date), $prompt: going to call 'raspivid'" >> /home/pi/log/dfrobot_log.txt
-        raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 >> /home/pi/log/dfrobot_log.txt 2>&1 &
+        # Do not write output to logfile but to /dev/null to prevent filling up.
+        raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 > /dev/null 2>&1 &
     elif [ "${1}" == "capture-stop" ]
     then
         echo "***** $(date), $prompt: 'capture-stop' command received" >> /home/pi/log/dfrobot_log.txt
         killall raspivid
         # Convert to mp4. Wait for it to finish before continuing.
         echo "***** $(date), $prompt: going to call 'MP4Box'" >> /home/pi/log/dfrobot_log.txt
-        # Do not write output of MP4Box to logfile but to /dev/null as it is too much data.
+        # Do not write output to logfile but to /dev/null to prevent filling up.
         MP4Box -fps 30 -new -add /home/pi/DFRobotUploads/dfrobot_pivid.h264 /home/pi/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1
         # Going to purge previously uploaded files to prevent filling up Google Drive. See below why 'sudo -u www-data' is used. Wait for it to finish before continuing.
         echo "***** $(date), $prompt: going to call 'purgeDFRobotUploads'" >> /home/pi/log/dfrobot_log.txt
