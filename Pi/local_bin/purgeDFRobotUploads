@@ -1,0 +1,38 @@
+#!/bin/bash
+# Note that when this script is run from cron, the  /usr/local/bin is not in the PATH variable.
+# $(basename $0) can be used to get the name of this script without any path prefix.
+
+prompt=$(basename $0)
+# Reset the log file to zero length if the size gets too large.
+if [ $(stat -c %s /home/pi/log/dfrobot_log.txt) -gt 100000 ]
+then
+    echo -e "***** $(date), $prompt: START LOG  *****" > /home/pi/log/dfrobot_log.txt
+else
+    echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
+fi
+
+# Start with removing previous uploads to  Google Drive to prevent filling up Google Drive
+# Define the number of files to keep after the purge.
+numberOfVideoFilesToKeep=2
+numberOfLogFilesToKeep=0
+
+# Store all id's of the dfrobot_pivid.mp4 files on Google Drive in an array
+# The 'drive' utility will list the newest files first.
+videoFileArray=( $(/usr/local/bin/drive list -t dfrobot_pivid.mp4 | sed -n 's/^\([^ ]*\).*$/\1/p') )
+logFileArray=( $(/usr/local/bin/drive list -t dfrobot_log.txt | sed -n 's/^\([^ ]*\).*$/\1/p') )
+
+echo "***** $(date), $prompt: $((${#videoFileArray[@]}-1)) dfrobot_pivid.mp4 files found on Google Drive" >> /home/pi/log/dfrobot_log.txt
+echo "***** $(date), $prompt: $((${#logFileArray[@]}-1)) dfrobot_log.txt files found on Google Drive" >> /home/pi/log/dfrobot_log.txt
+
+# Purge video files.
+# Go through the array of id's from back to forth, to handle the oldest file first.
+for (( i=${#videoFileArray[@]}-1; i>$numberOfVideoFilesToKeep; i-- )); do
+    /usr/local/bin/drive delete -i ${videoFileArray[i]} >> /home/pi/log/dfrobot_log.txt 2>&1
+done
+
+# Purge log files.
+# Go through the array of id's from back to forth, to handle the oldest file first.
+for (( i=${#logFileArray[@]}-1; i>$numberOfLogFilesToKeep; i-- )); do
+    /usr/local/bin/drive delete -i ${logFileArray[i]} >> /home/pi/log/dfrobot_log.txt 2>&1
+done
+

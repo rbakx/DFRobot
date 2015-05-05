@@ -1,0 +1,39 @@
+#!/bin/bash
+# Note that when this script is run from cron, the  /usr/local/bin is not in the PATH variable.
+# $(basename $0) can be used to get the name of this script without any path prefix.
+
+prompt=$(basename $0)
+# Reset the log file to zero length if the size gets too large.
+if [ $(stat -c %s /home/pi/log/dfrobot_log.txt) -gt 100000 ]
+then
+    echo -e "***** $(date), $prompt: START LOG  *****" > /home/pi/log/dfrobot_log.txt
+else
+    echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
+fi
+
+# First check if there are active connections. If so, do not run this script.
+if [ $(netstat | grep 44444 | wc -l) -gt 0 ]; then
+    echo "***** $(date), $prompt: not going to run because there are active connections" >> /home/pi/log/dfrobot_log.txt
+    exit 0
+fi
+
+# Start with removing previous uploads to  Google Drive to prevent filling up Google Drive
+echo "***** $(date), $prompt: going to call 'purgeDFRobotUploads'" >> /home/pi/log/dfrobot_log.txt
+/usr/local/bin/purgeDFRobotUploads
+
+# Start capture video, time limit is set to 1 minute. Wait for it to finish before continuing.
+echo "***** $(date), $prompt: going to call 'raspivid'" >> /home/pi/log/dfrobot_log.txt
+raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 >> /home/pi/log/dfrobot_log.txt 2>&1
+# Convert to mp4. Wait for it to finish before continuing.
+echo "***** $(date), $prompt: going to call 'MP4Box'" >> /home/pi/log/dfrobot_log.txt
+# Do not write output of MP4Box to logfile but to /dev/null as it is too much data.
+MP4Box -fps 30 -new -add /home/pi/DFRobotUploads/dfrobot_pivid.h264 /home/pi/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1
+# Going to upload the file to Google Drive using the 'drive' utility.
+# To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
+# When the 'DFRobotUploads' folder is changed, a new id has to be provided.
+# This id can be obtained using 'drive list -t DFRobotUploads'.
+# The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
+echo "***** $(date), $prompt: going to call 'drive' to upload videofile" >> /home/pi/log/dfrobot_log.txt
+/usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/dfrobot_log.txt 2>&1
+echo "***** $(date), $prompt: going to call 'drive' to upload logfile" >> /home/pi/log/dfrobot_log.txt
+/usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt >> /home/pi/log/dfrobot_log.txt 2>&1

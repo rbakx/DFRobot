@@ -1,23 +1,39 @@
 #!/bin/bash
 
 function handle_command {
-    echo "***** log file created at $(date) *****" > /home/pi/log/$(basename $0)_log.txt
+    prompt=$(basename $0)
+    # Reset the log file to zero length if the size gets too large.
+    if [ $(stat -c %s /home/pi/log/dfrobot_log.txt) -gt 100000 ]
+    then
+        echo -e "***** $(date), $prompt: START LOG  *****" > /home/pi/log/dfrobot_log.txt
+    else
+        echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
+    fi
+
     if [ "${1}" == "start-stream" ]
     then
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" >> /home/pi/log/$(basename $0)_log.txt 2>&1 &
+        echo "***** $(date), $prompt: 'start-stream' command received" >> /home/pi/log/dfrobot_log.txt
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" >> /home/pi/log/dfrobot_log.txt 2>&1 &
     elif [ "${1}" == "stop-stream" ]
     then
+        echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
         kill $(pgrep mjpg_streamer) > /dev/null 2>&1
     elif [ "${1}" == "capture-start" ]
     then
+        echo "***** $(date), $prompt: 'capture-start' command received" >> /home/pi/log/dfrobot_log.txt
         # Start capture video, time limit is set to 1 minute.
-        raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 >> /home/pi/log/$(basename $0)_log.txt 2>&1 &
+        echo "***** $(date), $prompt: going to call 'raspivid'" >> /home/pi/log/dfrobot_log.txt
+        raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 >> /home/pi/log/dfrobot_log.txt 2>&1 &
     elif [ "${1}" == "capture-stop" ]
     then
+        echo "***** $(date), $prompt: 'capture-stop' command received" >> /home/pi/log/dfrobot_log.txt
         killall raspivid
-        # Convert to mp4. Do wait for it to finish before starting the upload so no '&' at the end.
-        MP4Box -fps 30 -new -add /home/pi/DFRobotUploads/dfrobot_pivid.h264 /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/$(basename $0)_log.txt 2>&1
-        # Going to purge previously uploaded files to prevent filling up Google Drive. See below why 'sudo -u www-data' is used.
+        # Convert to mp4. Wait for it to finish before continuing.
+        echo "***** $(date), $prompt: going to call 'MP4Box'" >> /home/pi/log/dfrobot_log.txt
+        # Do not write output of MP4Box to logfile but to /dev/null as it is too much data.
+        MP4Box -fps 30 -new -add /home/pi/DFRobotUploads/dfrobot_pivid.h264 /home/pi/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1
+        # Going to purge previously uploaded files to prevent filling up Google Drive. See below why 'sudo -u www-data' is used. Wait for it to finish before continuing.
+        echo "***** $(date), $prompt: going to call 'purgeDFRobotUploads'" >> /home/pi/log/dfrobot_log.txt
         sudo -u www-data purgeDFRobotUploads
         # Going to upload the file to Google Drive using the 'drive' utility.
         # 'sudo -u www-data' is used here to behave as the exact same www-data user
@@ -28,36 +44,48 @@ function handle_command {
         # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
         # This id can be obtained using 'drive list -t DFRobotUploads'.
         # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
-        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/$(basename $0)_log.txt 2>&1 &
+        echo "***** $(date), $prompt: going to call 'drive' to upload videofile" >> /home/pi/log/dfrobot_log.txt
+        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/dfrobot_log.txt 2>&1 &
+        echo "***** $(date), $prompt: going to call 'drive' to upload logfile" >> /home/pi/log/dfrobot_log.txt
+        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt >> /home/pi/log/dfrobot_log.txt 2>&1 &
     elif [ "${1}" == "home" ]
     then
-        echo hello
+        echo "***** $(date), $prompt: 'home' command received" >> /home/pi/log/dfrobot_log.txt
     elif [ "${1}" == "forward" ]
     then
+        echo "***** $(date), $prompt: 'forward' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 1 ${2} > /dev/null 2>&1
     elif [ "${1}" == "backward" ]
     then
+        echo "***** $(date), $prompt: 'backward' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 2 ${2} > /dev/null 2>&1
     elif [ "${1}" == "left" ]
     then
+        echo "***** $(date), $prompt: 'left' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 3 ${2} > /dev/null 2>&1
     elif [ "${1}" == "right" ]
     then
+        echo "***** $(date), $prompt: 'right' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 4 ${2} > /dev/null 2>&1
     elif [ "${1}" == "cam-up" ]
     then
+        echo "***** $(date), $prompt: 'cam-up' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 10 > /dev/null 2>&1
     elif [ "${1}" == "cam-down" ]
     then
+        echo "***** $(date), $prompt: 'cam-down' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 11 > /dev/null 2>&1
     elif [ "${1}" == "light-on" ]
     then
+        echo "***** $(date), $prompt: 'light-on' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 20 > /dev/null 2>&1
     elif [ "${1}" == "light-off" ]
     then
+        echo "***** $(date), $prompt: 'light-off' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 21 > /dev/null 2>&1
     elif [ "${1}" == "status" ]
     then
+        echo "***** $(date), $prompt: 'status' command received" >> /home/pi/log/dfrobot_log.txt
         do_update=true
     fi
 }
