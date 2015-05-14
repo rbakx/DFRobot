@@ -13,12 +13,11 @@ function handle_command {
     if [ "${1}" == "start-stream" ]
     then
         echo "***** $(date), $prompt: 'start-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        # Do not write output to logfile but to /dev/null to prevent filling up.
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/ /opt/mjpg-streamer/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 15 -q 50 -ex sports -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/www" > /dev/null 2>&1 &
+        uv4l --auto-video_nr --driver raspicam --encoding mjpeg --width 800 --height 600 --quality 10 --framerate 30 --exposure auto --hflip yes --vflip yes --server-option '--port=44445' >> /home/pi/log/dfrobot_log.txt 2>&1
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        kill $(pgrep mjpg_streamer) > /dev/null 2>&1
+        killall uv4l
     elif [ "${1}" == "capture-start" ]
     then
         echo "***** $(date), $prompt: 'capture-start' command received" >> /home/pi/log/dfrobot_log.txt

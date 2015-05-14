@@ -90,6 +90,8 @@ void setup()
 
   Serial.begin(9600);
   servoCameraPos = 0;
+  myServo.attach(SERVOCAMERA);   // attaches the servocamera pin to the servo object
+  myServo.write(servoCameraPos); // put servocamera in start position
 } 
 
 void loop() 
@@ -146,20 +148,12 @@ void loop()
     break;
   case 10: // servo for camera up
     servoCameraPos = min(servoCameraPos + 30, 90);
-    myServo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object
     myServo.write(servoCameraPos);
-    delay(500); // give servo time to react before detaching pin
-    // Detach pin to make sure servo uses minimal current. The position of the servo is then not fixed anymore.
-    myServo.detach();
     i2cCommand = 0;
     break;
   case 11: // servo for camera down
     servoCameraPos = max(servoCameraPos - 30, 0);
-    myServo.attach(SERVOCAMERA);  // attaches the servocamera pin to the servo object 
     myServo.write(servoCameraPos);
-    delay(500); // give servo time to react before detaching pin
-    // Detach pin to make sure servo uses minimal current. The position of the servo is then not fixed anymore.
-    myServo.detach();
     i2cCommand = 0;
     break;
   case 20: // light on
