@@ -13,7 +13,7 @@ function handle_command {
     if [ "${1}" == "start-stream" ]
     then
         echo "***** $(date), $prompt: 'start-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        uv4l --auto-video_nr --driver raspicam --encoding mjpeg --width 800 --height 600 --quality 10 --framerate 30 --exposure auto --hflip yes --vflip yes --server-option '--port=44445' >> /home/pi/log/dfrobot_log.txt 2>&1
+        uv4l --auto-video_nr --driver raspicam --encoding mjpeg --width 800 --height 600 --quality 10 --framerate 10 --exposure auto --hflip yes --vflip yes --server-option '--port=44445' >> /home/pi/log/dfrobot_log.txt 2>&1
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
