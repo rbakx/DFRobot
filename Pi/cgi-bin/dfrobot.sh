@@ -10,10 +10,20 @@ function handle_command {
         echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
     fi
 
-    if [ "${1}" == "start-stream" ]
+    if [ "${1}" == "start-stream-hq" ]
     then
-        echo "***** $(date), $prompt: 'start-stream' command received" >> /home/pi/log/dfrobot_log.txt
+        echo "***** $(date), $prompt: 'start-stream-hq' command received" >> /home/pi/log/dfrobot_log.txt
+        # Start high quality video stream. Stop previous stream first if any.
+        killall uv4l
+        sleep 0.5
         uv4l --auto-video_nr --driver raspicam --encoding mjpeg --width 800 --height 600 --quality 10 --framerate 10 --exposure auto --hflip yes --vflip yes --server-option '--port=44445' >> /home/pi/log/dfrobot_log.txt 2>&1
+    elif [ "${1}" == "start-stream-lq" ]
+    then
+        echo "***** $(date), $prompt: 'start-stream-lq' command received" >> /home/pi/log/dfrobot_log.txt
+        # Start low quality video stream. Stop previous stream first if any.
+        killall uv4l
+        sleep 0.5
+        uv4l --auto-video_nr --driver raspicam --encoding mjpeg --width 800 --height 600 --quality 10 --framerate 2 --exposure auto --hflip yes --vflip yes --server-option '--port=44445' >> /home/pi/log/dfrobot_log.txt 2>&1
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
