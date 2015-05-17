@@ -17,10 +17,6 @@ if [ $(netstat | grep 44444 | wc -l) -gt 0 ]; then
     exit 0
 fi
 
-# Start with removing previous uploads to  Google Drive to prevent filling up Google Drive
-echo "***** $(date), $prompt: going to call 'purgeDFRobotUploads'" >> /home/pi/log/dfrobot_log.txt
-/usr/local/bin/purgeDFRobotUploads
-
 # Start capture video, time limit is set to 1 minute. Wait for it to finish before continuing.
 echo "***** $(date), $prompt: going to call 'raspivid'" >> /home/pi/log/dfrobot_log.txt
 # Do not write output to logfile but to /dev/null to prevent filling up.
@@ -38,3 +34,8 @@ echo "***** $(date), $prompt: going to call 'drive' to upload videofile" >> /hom
 /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/dfrobot_log.txt 2>&1
 echo "***** $(date), $prompt: going to call 'drive' to upload logfile" >> /home/pi/log/dfrobot_log.txt
 /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt >> /home/pi/log/dfrobot_log.txt 2>&1
+
+# Purge uploads to Google Drive to prevent filling up.
+echo "***** $(date), $prompt: going to call 'purgeDFRobotUploads'" >> /home/pi/log/dfrobot_log.txt
+/usr/local/bin/purgeDFRobotUploads dfrobot_pivid.mp4 3
+/usr/local/bin/purgeDFRobotUploads dfrobot_log.txt 1
