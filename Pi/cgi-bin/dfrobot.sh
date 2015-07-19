@@ -17,26 +17,26 @@ function handle_command {
     then
         echo "***** $(date), $prompt: 'start-stream-hq' command received" >> /home/pi/log/dfrobot_log.txt
         # Start capturing video stream. Stop previous capture first if any.
-        killall uv4l > /dev/null 2>&1
+        killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
-        uv4l --auto-video_nr --driver raspicam --encoding mjpeg --width 800 --height 600 --quality 10 --framerate 10 --exposure auto --hflip yes --vflip yes --server-option '--port=44445' >> /home/pi/log/dfrobot_log.txt 2>&1
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 10 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1
     elif [ "${1}" == "start-stream-lq" ]
     then
         echo "***** $(date), $prompt: 'start-stream-lq' command received" >> /home/pi/log/dfrobot_log.txt
         # Start low quality video stream. Stop previous stream first if any.
-        killall uv4l > /dev/null 2>&1
+        killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
-        uv4l --auto-video_nr --driver raspicam --encoding mjpeg --width 800 --height 600 --quality 10 --framerate 2 --exposure auto --hflip yes --vflip yes --server-option '--port=44445' >> /home/pi/log/dfrobot_log.txt 2>&1
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 640 -y 480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        killall uv4l > /dev/null 2>&1
+        killall mjpg_streamer > /dev/null 2>&1
     elif [ "${1}" == "capture-start" ]
     then
         echo "***** $(date), $prompt: 'capture-start' command received" >> /home/pi/log/dfrobot_log.txt
         # Start capture video from http stream, with timeout of 60 seconds.
         echo "***** $(date), $prompt: going to capture http MJPEG stream" >> /home/pi/log/dfrobot_log.txt
-        cvlc http://localhost:44445/stream/video.mjpeg --sout '#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}' --run-time=60 vlc://quit > /dev/null 2>&1 &
+        cvlc http://localhost:44445/stream_simple.html --sout '#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}' --run-time=60 vlc://quit > /dev/null 2>&1 &
     elif [ "${1}" == "capture-stop" ]
     then
         echo "***** $(date), $prompt: 'capture-stop' command received" >> /home/pi/log/dfrobot_log.txt
