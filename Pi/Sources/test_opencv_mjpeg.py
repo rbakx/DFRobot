@@ -34,4 +34,5 @@ for i in range(0,10000):
             #cv2.imshow("Show",im)
             #cv2.waitKey(100)
             #cv2.destroyAllWindows()
-
+        else:
+            print 'no areas detected'
