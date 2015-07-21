@@ -2,8 +2,11 @@ import cv2
 import numpy as np
 import urllib
 import subprocess
+import os
 
-template = cv2.imread('template.jpg', 0)
+# Get directory of this python script
+dirname = os.path.dirname(os.path.realpath(__file__))
+template = cv2.imread(os.path.join(dirname,"template.jpg"), 0)
 w, h = template.shape[::-1]
 stream=urllib.urlopen('http://@localhost:44445/?action=stream')
 bytes=''

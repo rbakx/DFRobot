@@ -17,25 +17,31 @@ if [ $(netstat | grep 44444 | wc -l) -gt 0 ]; then
     exit 0
 fi
 
-# Start capture video, time limit is set to 1 minute. Wait for it to finish before continuing.
-echo "***** $(date), $prompt: going to call 'raspivid'" >> /home/pi/log/dfrobot_log.txt
-# Do not write output to logfile but to /dev/null to prevent filling up.
-raspivid -o /home/pi/DFRobotUploads/dfrobot_pivid.h264 -w 1280 -h 720 -vf -hf -t 60000 > /dev/null 2>&1
-# Convert to mp4. Wait for it to finish before continuing.
-echo "***** $(date), $prompt: going to call 'MP4Box'" >> /home/pi/log/dfrobot_log.txt
-# Do not write output to logfile but to /dev/null to prevent filling up.
-MP4Box -fps 30 -new -add /home/pi/DFRobotUploads/dfrobot_pivid.h264 /home/pi/DFRobotUploads/dfrobot_pivid.mp4 > /dev/null 2>&1
+# Start MJPEG stream needed by runDFRobot.py. Stop previous stream first if any.
+echo "***** $(date), $prompt: going to start stream" >> /home/pi/log/dfrobot_log.txt
+killall mjpg_streamer > /dev/null 2>&1
+sleep 0.5
+LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 320 -y 240" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1
+
+# Call python script which actually runs the robot.
+echo "***** $(date), $prompt: going to run runDFRobot.py" >> /home/pi/log/dfrobot_log.txt
+python /usr/local/bin/runDFRobot.py >> /home/pi/log/dfrobot_log.txt 2>&1
+
+# Stop MJPEG stream.
+echo "***** $(date), $prompt: going to stop stream" >> /home/pi/log/dfrobot_log.txt
+killall mjpg_streamer > /dev/null 2>&1
+
 # Going to upload the file to Google Drive using the 'drive' utility.
 # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
 # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
 # This id can be obtained using 'drive list -t DFRobotUploads'.
 # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
 echo "***** $(date), $prompt: going to call 'drive' to upload videofile" >> /home/pi/log/dfrobot_log.txt
-/usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.mp4 >> /home/pi/log/dfrobot_log.txt 2>&1
+/usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid.avi >> /home/pi/log/dfrobot_log.txt 2>&1
 echo "***** $(date), $prompt: going to call 'drive' to upload logfile" >> /home/pi/log/dfrobot_log.txt
 /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt >> /home/pi/log/dfrobot_log.txt 2>&1
 
 # Purge uploads to Google Drive to prevent filling up.
 echo "***** $(date), $prompt: going to call 'purgeDFRobotUploads'" >> /home/pi/log/dfrobot_log.txt
-/usr/local/bin/purgeDFRobotUploads dfrobot_pivid.mp4 3
+/usr/local/bin/purgeDFRobotUploads dfrobot_pivid.avi 3
 /usr/local/bin/purgeDFRobotUploads dfrobot_log.txt 1

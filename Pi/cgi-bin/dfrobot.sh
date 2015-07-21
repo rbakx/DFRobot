@@ -36,7 +36,7 @@ function handle_command {
         echo "***** $(date), $prompt: 'capture-start' command received" >> /home/pi/log/dfrobot_log.txt
         # Start capture video from http stream, with timeout of 60 seconds.
         echo "***** $(date), $prompt: going to capture http MJPEG stream" >> /home/pi/log/dfrobot_log.txt
-        cvlc http://localhost:44445/stream_simple.html --sout '#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}' --run-time=60 vlc://quit > /dev/null 2>&1 &
+        cvlc http://localhost:44445/?action=stream --sout '#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}' --run-time=60 vlc://quit > /dev/null 2>&1 &
     elif [ "${1}" == "capture-stop" ]
     then
         echo "***** $(date), $prompt: 'capture-stop' command received" >> /home/pi/log/dfrobot_log.txt
@@ -66,9 +66,6 @@ function handle_command {
         sudo -u www-data purgeDFRobotUploads dfrobot_pivid_man.mp4 3 ;\
         sudo -u www-data purgeDFRobotUploads dfrobot_log.txt 1 ;\
     ) > /dev/null 2>&1 &
-    elif [ "${1}" == "home" ]
-    then
-        echo "***** $(date), $prompt: 'home' command received" >> /home/pi/log/dfrobot_log.txt
     elif [ "${1}" == "forward" ]
     then
         echo "***** $(date), $prompt: 'forward' command received" >> /home/pi/log/dfrobot_log.txt
@@ -101,6 +98,15 @@ function handle_command {
     then
         echo "***** $(date), $prompt: 'light-off' command received" >> /home/pi/log/dfrobot_log.txt
         i2c_cmd 21 > /dev/null 2>&1
+    elif [ "${1}" == "home-start" ]
+    then
+        echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
+        python /usr/local/bin/homeDFRobot.py >> /home/pi/log/dfrobot_log.txt 2>&1
+    elif [ "${1}" == "home-stop" ]
+    then
+        echo "***** $(date), $prompt: 'home-stop' command received" >> /home/pi/log/dfrobot_log.txt
+        # Use pkill to kill only python process running homeDFRobot.py script.
+        pkill -f homeDFRobot.py >> /home/pi/log/dfrobot_log.txt 2>&1
     elif [ "${1}" == "status" ]
     then
         echo "***** $(date), $prompt: 'status' command received" >> /home/pi/log/dfrobot_log.txt
@@ -108,6 +114,8 @@ function handle_command {
     fi
 }
 
+# Set below value to true to have an html frame refresh for every form action (like a button click).
+# On most devices this is not needed, except for an iPad.
 do_update=false
 
 # CGI POST method handling code below taken from http://tuxx-home.at/cmt.php?article=/2005/06/17/T09_07_39/index.html
