@@ -1,13 +1,14 @@
 import cv2
 import numpy as np
 import urllib
+import subprocess
 
 template = cv2.imread('template.jpg', 0)
 w, h = template.shape[::-1]
 stream=urllib.urlopen('http://@localhost:44445/?action=stream')
 bytes=''
 
-for i in range(0,10000):
+for i in range(0,100):
     bytes+=stream.read(1024)
     a = bytes.find('\xff\xd8')
     b = bytes.find('\xff\xd9')
@@ -28,3 +29,13 @@ for i in range(0,10000):
         cv2.rectangle(img,top_left, bottom_right, 255, 2)
         cv2.imshow("Show",img)
         cv2.waitKey(100)
+
+        cv2.imwrite('/home/pi/DFRobotUploads/tmp_img' + str(i) + '.jpg', img)
+
+p = subprocess.Popen(['mencoder', 'mf:///home/pi/DFRobotUploads/tmp_img*.jpg', '-mf', 'w=320:h=240:fps=2:type=jpg', '-ovc', 'lavc', '-lavcopts', 'vcodec=mpeg4:mbd=2:trell', '-oac', 'copy', '-o', '/home/pi/DFRobotUploads/dfrobot_pivid.avi'])
+p.wait()
+# Below use shell=True to enable file name expansion.
+p = subprocess.Popen('rm /home/pi/DFRobotUploads/tmp_img*', shell=True)
+p.wait()
+
+
