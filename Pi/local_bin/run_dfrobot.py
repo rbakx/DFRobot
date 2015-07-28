@@ -16,7 +16,7 @@ doMove = True
 
 directionFront = 312.0
 directionRight = 24.0
-directionBack = 160.0
+directionBack = 112.0
 directionLeft = 258.0
 
 def homeRobot( ):
@@ -142,7 +142,7 @@ def homeRobot( ):
                     if not move1Done:
                         move1Done = own_util.move('left', 240 - correction * 1, doMove)
                     elif not move2Done:
-                        move2Done = own_util.move('forward', 128 + correction * 4, doMove)
+                        move2Done = own_util.move('forward', 128 + correction * 3, doMove)
                     elif not move3Done:
                         move3Done = own_util.move('right', 240 - correction * 1, doMove)
                     # After the approach connection wait for the image to stabol;ize
@@ -160,7 +160,7 @@ def homeRobot( ):
                     if not move1Done:
                         move1Done = own_util.move('right', 240 + correction * 1, doMove)
                     elif not move2Done:
-                        move2Done = own_util.move('forward', 128 - correction * 4, doMove)
+                        move2Done = own_util.move('forward', 128 - correction * 3, doMove)
                     elif not move3Done:
                         move3Done = own_util.move('left', 240 + correction * 1, doMove)
                     # After the approach connection wait for the image to stabol;ize
@@ -208,8 +208,8 @@ def homeRobot( ):
                         else:
                             own_util.move('forward', 140, doMove)
                     else:
-                        compass.gotoDegree(104, doMove)
-                        for i in range(0, 10):
+                        compass.gotoDegree(directionBack, doMove)
+                        for i in range(0, 8):
                             own_util.moveDirect('backward', 140, doMove)
                             time.sleep(0.5)
                         own_util.writeToLogFile('Home found!\n')

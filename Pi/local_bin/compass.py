@@ -60,22 +60,22 @@ def gotoDegree(targetDegree, doMove):
         diffAngle = diffAngle + 360
     if doMove == False:
         return diffAngle
-    while abs(diffAngle) > 2:
+    while abs(diffAngle) > 2.0:
         if diffAngle > 0:
-            if abs(diffAngle) < 10:
+            if abs(diffAngle) < 30:
                 own_util.moveDirect('right', 128, True)
                 time.sleep(0.5)
-            elif abs(diffAngle) < 40:
+            elif abs(diffAngle) < 50:
                 own_util.moveDirect('right', 140, True)
                 time.sleep(0.5)
             else:
                 own_util.moveDirect('right', 160, True)
                 time.sleep(0.5)
         else:
-            if abs(diffAngle) < 10:
+            if abs(diffAngle) < 30:
                 own_util.moveDirect('left', 128, True)
                 time.sleep(0.5)
-            elif abs(diffAngle) < 40:
+            elif abs(diffAngle) < 50:
                 own_util.moveDirect('left', 140, True)
                 time.sleep(0.5)
             else:
