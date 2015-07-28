@@ -5,6 +5,7 @@ import smbus
 import time
 import math
 import subprocess
+import ownUtil
 
 def runShellCommandWait( cmd ):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
@@ -56,21 +57,31 @@ def readCompass():
     
     return math.degrees(bearing)
 
-def gotoDegree(targetDegree):
+def gotoDegree(targetDegree, doMove):
     currentDegree = readCompass()
-    targetDegree180 = targetDegree if targetDegree < 180 else targetDegree - 360
-    currentDegree180 = currentDegree if currentDegree < 180 else currentDegree - 360
-    print currentDegree180
-    while abs(targetDegree180 - currentDegree180) > 5:
-        print 'target, current: ', targetDegree180, currentDegree180
-        if targetDegree180 > currentDegree180 and targetDegree180 - currentDegree180 < 180:
-            print 'right'
-            stdOutAndErr = runShellCommandWait('i2c_cmd 4 128') # right
-            time.sleep(0.5)
+    diffAngle = targetDegree - currentDegree
+    if diffAngle > 180:
+        diffAngle = diffAngle - 360
+    elif diffAngle < -180:
+        diffAngle = diffAngle + 360
+    if doMove == False:
+        return diffAngle
+    while abs(diffAngle) > 3:
+        if diffAngle > 0:
+            if abs(diffAngle) < 10:
+                move('right', 128)
+            else:
+                move('right', 160)
         else:
-            print 'left'
-            stdOutAndErr = runShellCommandWait('i2c_cmd 3 128') # left
-            time.sleep(0.5)
+            if abs(diffAngle) < 10:
+                move('left', 128)
+            else:
+                move('left', 160)
         currentDegree = readCompass()
-        currentDegree180 = currentDegree if currentDegree < 180 else currentDegree - 360
+        diffAngle = targetDegree - currentDegree
+        if diffAngle > 180:
+            diffAngle = diffAngle - 360
+        elif diffAngle < -180:
+            diffAngle = diffAngle + 360
+    return diffAngle
 

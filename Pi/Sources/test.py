@@ -7,5 +7,5 @@ import os
 import time
 import compass
 
-compass.gotoDegree(26)
+compass.gotoDegree(102, True)
 

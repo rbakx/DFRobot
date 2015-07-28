@@ -100,7 +100,7 @@ void loop()
   {
   case 1: // forward
     if (i2cParameter >=128) {
-      int ms = i2cParameter == 128 ? 200 : 1000;
+      int ms = map(i2cParameter, 128, 255, 50, 1000);
       Motor1(255, false);
       Motor2(255, false);
       delay(ms);
@@ -112,7 +112,7 @@ void loop()
     break;
   case 2: // backward
     if (i2cParameter >=128) {
-      int ms = i2cParameter == 128 ? 200 : 1000;
+      int ms = map(i2cParameter, 128, 255, 50, 1000);
       Motor1(255, true);
       Motor2(255, true);
       delay(ms);
@@ -124,7 +124,7 @@ void loop()
     break;
   case 3: // turn left
     if (i2cParameter >=128) {
-      int ms = i2cParameter == 128 ? 100 : 400;
+      int ms = map(i2cParameter, 128, 255, 50, 400);
       Motor1(255, false);
       Motor2(255, true);
       delay(ms);
@@ -136,7 +136,7 @@ void loop()
     break;
   case 4: // turn right
     if (i2cParameter >=128) {
-      int ms = i2cParameter == 128 ? 100 : 400;
+      int ms = map(i2cParameter, 128, 255, 50, 400);
       Motor1(255, true);
       Motor2(255, false);
       delay(ms);

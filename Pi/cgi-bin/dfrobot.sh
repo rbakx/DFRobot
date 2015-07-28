@@ -62,9 +62,9 @@ function handle_command {
         echo "***** $(date), $prompt: going to call 'drive' to upload logfile" >> /home/pi/log/dfrobot_log.txt ;\
         sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt >> /home/pi/log/dfrobot_log.txt 2>&1 ;\
         # Going to purge previously uploaded files to prevent filling up Google Drive.
-        echo "***** $(date), $prompt: going to call 'purgeDFRobotUploads'" >> /home/pi/log/dfrobot_log.txt ;\
-        sudo -u www-data purgeDFRobotUploads.sh dfrobot_pivid_man.mp4 3 ;\
-        sudo -u www-data purgeDFRobotUploads.sh dfrobot_log.txt 1 ;\
+        echo "***** $(date), $prompt: going to call 'purge_dfrobot_uploads.sh'" >> /home/pi/log/dfrobot_log.txt ;\
+        sudo -u www-data purge_dfrobot_uploads.sh dfrobot_pivid_man.mp4 3 ;\
+        sudo -u www-data purge_dfrobot_uploads.sh dfrobot_log.txt 1 ;\
     ) > /dev/null 2>&1 &
     elif [ "${1}" == "forward" ]
     then
@@ -101,12 +101,12 @@ function handle_command {
     elif [ "${1}" == "home-start" ]
     then
         echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
-        /usr/local/bin/goHomeDFRobot.py > /dev/null 2>&1
+        /usr/local/bin/home_dfrobot.py > /dev/null 2>&1
     elif [ "${1}" == "home-stop" ]
     then
         echo "***** $(date), $prompt: 'home-stop' command received" >> /home/pi/log/dfrobot_log.txt
-        # Use pkill to kill only python process running homeDFRobot.py script.
-        pkill -f goHomeDFRobot.py > /dev/null 2>&1
+        # Use pkill to kill only python process running home_dfrobot.py script.
+        pkill -f home_dfrobot.py > /dev/null 2>&1
     elif [ "${1}" == "status" ]
     then
         echo "***** $(date), $prompt: 'status' command received" >> /home/pi/log/dfrobot_log.txt

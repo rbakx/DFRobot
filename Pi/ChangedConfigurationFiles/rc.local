@@ -16,5 +16,5 @@ _IP=$(hostname -I) || true
 if [ "$_IP" ]; then
   printf "My IP address is %s\n" "$_IP"
 fi
-/usr/local/bin/ownWatchdog.sh &
+/usr/local/bin/own_watchdog.sh &
 exit 0
