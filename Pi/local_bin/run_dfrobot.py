@@ -142,7 +142,7 @@ def homeRobot( ):
                     if not move1Done:
                         move1Done = own_util.move('left', 240 - correction * 1, doMove)
                     elif not move2Done:
-                        move2Done = own_util.move('forward', 135 + correction * 4, doMove)
+                        move2Done = own_util.move('forward', 128 + correction * 4, doMove)
                     elif not move3Done:
                         move3Done = own_util.move('right', 240 - correction * 1, doMove)
                     # After the approach connection wait for the image to stabol;ize
@@ -160,7 +160,7 @@ def homeRobot( ):
                     if not move1Done:
                         move1Done = own_util.move('right', 240 + correction * 1, doMove)
                     elif not move2Done:
-                        move2Done = own_util.move('forward', 135 - correction * 4, doMove)
+                        move2Done = own_util.move('forward', 128 - correction * 4, doMove)
                     elif not move3Done:
                         move3Done = own_util.move('left', 240 + correction * 1, doMove)
                     # After the approach connection wait for the image to stabol;ize
