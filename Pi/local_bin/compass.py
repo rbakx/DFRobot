@@ -60,17 +60,27 @@ def gotoDegree(targetDegree, doMove):
         diffAngle = diffAngle + 360
     if doMove == False:
         return diffAngle
-    while abs(diffAngle) > 3:
+    while abs(diffAngle) > 2:
         if diffAngle > 0:
             if abs(diffAngle) < 10:
-                own_util.move('right', 128, True)
+                own_util.moveDirect('right', 128, True)
+                time.sleep(0.5)
+            elif abs(diffAngle) < 40:
+                own_util.moveDirect('right', 140, True)
+                time.sleep(0.5)
             else:
-                own_util.move('right', 160, True)
+                own_util.moveDirect('right', 160, True)
+                time.sleep(0.5)
         else:
             if abs(diffAngle) < 10:
-                own_util.move('left', 128, True)
+                own_util.moveDirect('left', 128, True)
+                time.sleep(0.5)
+            elif abs(diffAngle) < 40:
+                own_util.moveDirect('left', 140, True)
+                time.sleep(0.5)
             else:
-                own_util.move('left', 160, True)
+                own_util.moveDirect('left', 160, True)
+                time.sleep(0.5)
         currentDegree = readCompass()
         diffAngle = targetDegree - currentDegree
         if diffAngle > 180:
