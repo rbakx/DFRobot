@@ -14,10 +14,10 @@ doPrint = False
 doShow = False
 doMove = True
 
-directionFront = 312.0
-directionRight = 24.0
-directionBack = 112.0
-directionLeft = 258.0
+directionFront = 297.0
+directionRight = 26.0
+directionBack = 114.0
+directionLeft = 202.0
 
 def homeRobot( ):
     stream=urllib.urlopen('http://@localhost:44445/?action=stream')
@@ -209,7 +209,7 @@ def homeRobot( ):
                             own_util.move('forward', 140, doMove)
                     else:
                         compass.gotoDegree(directionBack, doMove)
-                        for i in range(0, 8):
+                        for i in range(0, 10):
                             own_util.moveDirect('backward', 140, doMove)
                             time.sleep(0.5)
                         own_util.writeToLogFile('Home found!\n')

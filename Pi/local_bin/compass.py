@@ -34,22 +34,43 @@ def read_word_2c(adr):
 def write_byte(adr, value):
     bus.write_byte_data(address, adr, value)
 
-def readCompass():
-    write_byte(0, 0b01110000) # Set to 8 samples @ 15Hz
-    write_byte(1, 0b00100000) # 1.3 gain LSb / Gauss 1090 (default)
-    write_byte(2, 0b00000000) # Continuous sampling
+def readCompass(debug = False):
+    write_byte(0, 0b01110000) # Set to 8 samples @ 15Hz.
+    write_byte(1, 0b00100000) # 1.3 gain LSb / Gauss 1090 (default).
+    write_byte(2, 0b00000000) # Continuous-Measurement Mode.
     
-    scale = 0.92
-    
-    x_out = read_word_2c(3) * scale
-    y_out = read_word_2c(7) * scale
-    z_out = read_word_2c(5) * scale
-    
+    time.sleep(0.006)  # Wait 6 ms as specified in data sheet.
+
+    x_out_raw = read_word_2c(3)
+    y_out_raw = read_word_2c(7)
+    z_out_raw = read_word_2c(5)
+
+    # When supplying a 'True' as parameter to this function the raw X Y Z data and the corrected data will be printed.
+    # From measurements of these raw values it shows that we have to compensate quite a bit with a gain and offset.
+    # This is because the HMC5883L is mounted on the robot and is very sensitive to surrounding metal and fields.
+    # Actual measurements:
+    # x_out range: [-170 .. 228]
+    # y_out range: [-480 .. -55]
+    # We apply a scale and ofset to both x_out and y_out so the range will be [-200 .. 200]
+    x_out = x_out_raw * 1.005 - 29.14
+    y_out = y_out_raw * 0.941 + 251.68
+
     bearing  = math.atan2(y_out, x_out)
     if (bearing < 0):
         bearing += 2 * math.pi
+    degrees = math.degrees(bearing)
     
-    return math.degrees(bearing)
+    if debug == True:
+        print 'raw X Y Z:', x_out_raw, y_out_raw, z_out_raw
+        print 'corrected X Y and degrees:', int(x_out), int(y_out), round(degrees,2)
+    
+    return degrees
+
+# The below function is to test the compass and check which values to use for calibration.
+def testCompass():
+    while True:
+        readCompass(True)
+        time.sleep(0.5)
 
 def gotoDegree(targetDegree, doMove):
     currentDegree = readCompass()
@@ -60,9 +81,9 @@ def gotoDegree(targetDegree, doMove):
         diffAngle = diffAngle + 360
     if doMove == False:
         return diffAngle
-    while abs(diffAngle) > 2.0:
+    while abs(diffAngle) > 1.0:
         if diffAngle > 0:
-            if abs(diffAngle) < 30:
+            if abs(diffAngle) < 20:
                 own_util.moveDirect('right', 128, True)
                 time.sleep(0.5)
             elif abs(diffAngle) < 50:
@@ -72,7 +93,7 @@ def gotoDegree(targetDegree, doMove):
                 own_util.moveDirect('right', 160, True)
                 time.sleep(0.5)
         else:
-            if abs(diffAngle) < 30:
+            if abs(diffAngle) < 20:
                 own_util.moveDirect('left', 128, True)
                 time.sleep(0.5)
             elif abs(diffAngle) < 50:
