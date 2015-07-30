@@ -49,11 +49,11 @@ def readCompass(debug = False):
     # From measurements of these raw values it shows that we have to compensate quite a bit with a gain and offset.
     # This is because the HMC5883L is mounted on the robot and is very sensitive to surrounding metal and fields.
     # Actual measurements:
-    # x_out range: [-170 .. 228]
-    # y_out range: [-480 .. -55]
+    # x_out range: [-179 .. 238]
+    # y_out range: [-245 .. 187]
     # We apply a scale and ofset to both x_out and y_out so the range will be [-200 .. 200]
-    x_out = x_out_raw * 1.005 - 29.14
-    y_out = y_out_raw * 0.941 + 251.68
+    x_out = x_out_raw * 0.959 -28.242
+    y_out = y_out_raw * 0.926 + 26.838
 
     bearing  = math.atan2(y_out, x_out)
     if (bearing < 0):
