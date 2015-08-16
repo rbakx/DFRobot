@@ -72,7 +72,7 @@ def testCompass():
         readCompass(True)
         time.sleep(0.5)
 
-def gotoDegree(targetDegree, doMove):
+def gotoDegreeAbs(targetDegree, doMove):
     currentDegree = readCompass()
     diffAngle = targetDegree - currentDegree
     if diffAngle > 180:
@@ -84,29 +84,28 @@ def gotoDegree(targetDegree, doMove):
     while abs(diffAngle) > 1.0:
         if diffAngle > 0:
             if abs(diffAngle) < 20:
-                own_util.moveDirect('right', 128, True)
-                time.sleep(0.5)
+                own_util.move('right', 128, 1.0, True)
             elif abs(diffAngle) < 50:
-                own_util.moveDirect('right', 140, True)
-                time.sleep(0.5)
+                own_util.move('right', 140, 1.0, True)
             else:
-                own_util.moveDirect('right', 160, True)
-                time.sleep(0.5)
+                own_util.move('right', 160, 1.0, True)
         else:
             if abs(diffAngle) < 20:
-                own_util.moveDirect('left', 128, True)
-                time.sleep(0.5)
+                own_util.move('left', 128, 1.0, True)
             elif abs(diffAngle) < 50:
-                own_util.moveDirect('left', 140, True)
-                time.sleep(0.5)
+                own_util.move('left', 140, 1.0, True)
             else:
-                own_util.moveDirect('left', 160, True)
-                time.sleep(0.5)
+                own_util.move('left', 160, 1.0, True)
         currentDegree = readCompass()
         diffAngle = targetDegree - currentDegree
         if diffAngle > 180:
             diffAngle = diffAngle - 360
         elif diffAngle < -180:
             diffAngle = diffAngle + 360
+    return diffAngle
+
+def gotoDegreeRel(targetDegree, doMove):
+    currentDegree = readCompass()
+    diffAngle = gotoDegreeAbs(currentDegree + targetDegree, doMove)
     return diffAngle
 

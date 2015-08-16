@@ -25,7 +25,7 @@ def runShellCommandWait( cmd ):
 def runShellCommandNowait( cmd ):
     subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
 
-def moveDirect(direction, speed, doMove):
+def move(direction, speed, delay, doMove):
     if doMove:
         if direction == 'forward':
             dir = 1
@@ -38,28 +38,4 @@ def moveDirect(direction, speed, doMove):
         else:
             dir = 0
         stdOutAndErr = runShellCommandWait('i2c_cmd ' + str(dir) + ' ' + str(speed))
-
-waitForNextMove = 0
-def move(direction, speed, doMove):
-    global waitForNextMove
-    
-    if doMove:
-        if waitForNextMove == 0:
-            if direction == 'forward':
-                dir = 1
-            elif direction == 'backward':
-                dir = 2
-            elif direction == 'left':
-                dir = 3
-            elif direction == 'right':
-                dir = 4
-            else:
-                dir = 0
-            stdOutAndErr = runShellCommandWait('i2c_cmd ' + str(dir) + ' ' + str(speed))
-            waitForNextMove = 3
-        else:
-            waitForNextMove = waitForNextMove - 1
-    if waitForNextMove == 3:
-        return True  # indicates the move has been executed
-    else:
-        return False  # indicates the move has not been executed
+        time.sleep(delay)

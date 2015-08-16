@@ -26,7 +26,7 @@ function handle_command {
         # Start low quality video stream. Stop previous stream first if any.
         killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 320 -y 240" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
@@ -101,11 +101,14 @@ function handle_command {
     elif [ "${1}" == "home-start" ]
     then
         echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
-        /usr/local/bin/run_dfrobot.py > /dev/null 2>&1
+        /usr/local/bin/run_dfrobot.py -homerun > /dev/null 2>&1
     elif [ "${1}" == "home-stop" ]
     then
         echo "***** $(date), $prompt: 'home-stop' command received" >> /home/pi/log/dfrobot_log.txt
-        # Use pkill to kill only python process running run_dfrobot.py script.
+        # The name of the process to be killed is 'python' which is too general.
+        # Therefore use pkill -f to kill only the python process running the run_dfrobot.py script.
+        # With the -f option a pattern is matched against the full command line.
+        # Note that we only kill the python process started by this user (www-data).
         pkill -f run_dfrobot.py > /dev/null 2>&1
     elif [ "${1}" == "status" ]
     then
