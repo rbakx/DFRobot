@@ -122,19 +122,25 @@ def homeRun( ):
             detector = cv2.SimpleBlobDetector(params)
             blobs = detector.detect(img_gray)
             
-            # Sort blobs on size and check if they are valid.
+            # Sort blobs on horizontal position and check if they are valid.
             sortedBlobs = sorted(blobs, key=lambda x: x.pt[0], reverse=False)
             blobLeft = None
             blobMiddle = None
             blobRight = None
             validBlobsFound = False
             for blob in sortedBlobs:
-                # Fill in three blobs, left, middle right.
+                # Fill in three blobs, left, middle, right.
                 if blobLeft == None:
                     blobLeft = blob
                 elif blobMiddle == None:
+                    # Skip blop if it is significantly smaller than the first blob.
+                    if blob.size < blobLeft.size/2.0:
+                        continue
                     blobMiddle = blob
                 elif blobRight == None:
+                    # Skip blop if it is significantly smaller than the first blob.
+                    if blob.size < blobLeft.size/2.0:
+                        continue
                     blobRight = blob
                     # We have three blobs now, check if these are valid
                     # For now we consider the blobs valid if the left and right one have appr. equal size.
