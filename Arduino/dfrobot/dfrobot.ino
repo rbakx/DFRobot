@@ -146,15 +146,32 @@ void loop()
       i2cParameter = 0;
     }
     break;
-  case 10: // servo for camera up
-    servoCameraPos = min(servoCameraPos + 30, 90);
-    myServo.write(servoCameraPos);
-    i2cCommand = 0;
+  case 10: // servo for camera up, relative movement
+    if (i2cParameter >=128) {
+      // i2cParameter - 128 is number of degrees
+      servoCameraPos = min(servoCameraPos + (i2cParameter - 128), 90);
+      myServo.write(servoCameraPos);
+      i2cCommand = 0;
+      i2cParameter = 0;
+    }
     break;
-  case 11: // servo for camera down
-    servoCameraPos = max(servoCameraPos - 30, 0);
-    myServo.write(servoCameraPos);
-    i2cCommand = 0;
+  case 11: // servo for camera down, relative movement
+    if (i2cParameter >=128) {
+      // i2cParameter - 128 is number of degrees
+      servoCameraPos = max(servoCameraPos - (i2cParameter - 128), 0);
+      myServo.write(servoCameraPos);
+      i2cCommand = 0;
+      i2cParameter = 0;
+    }
+    break;
+  case 12: // servo for camera, absolute movement
+    if (i2cParameter >=128) {
+      // i2cParameter - 128 is number of degrees
+      servoCameraPos = min(i2cParameter - 128, 90);
+      myServo.write(servoCameraPos);
+      i2cCommand = 0;
+      i2cParameter = 0;
+    }
     break;
   case 20: // light on
     digitalWrite(LIGHT,HIGH);

@@ -30,7 +30,8 @@ numberOfFilesToKeep=$2
 
 # Store all id's of the $1 files on Google Drive in an array
 # The 'drive' utility will list the newest files first.
-fileArray=( $(/usr/local/bin/drive list -t $1 | sed -n 's/^\([^ ]*\).*$/\1/p') )
+# Run 'drive' as www-data to prevent Google Drive authentication problems.
+fileArray=( $(sudo -u www-data /usr/local/bin/drive list -t $1 | sed -n 's/^\([^ ]*\).*$/\1/p') )
 
 echo "***** $(date), $prompt: $((${#fileArray[@]}-1)) $1 files found on Google Drive" >> /home/pi/log/dfrobot_log.txt
 
@@ -38,5 +39,6 @@ echo "***** $(date), $prompt: $((${#fileArray[@]}-1)) $1 files found on Google D
 # Go through the array of id's from back to forth, to handle the oldest file first.
 for (( i=${#fileArray[@]}-1; i>$numberOfFilesToKeep; i-- )); do
     echo "***** $(date), $prompt: going to call 'drive' to purge" >> /home/pi/log/dfrobot_log.txt
-    /usr/local/bin/drive delete -i ${fileArray[i]} >> /home/pi/log/dfrobot_log.txt 2>&1
+    # Run 'drive' as www-data to prevent Google Drive authentication problems.
+    sudo -u www-data /usr/local/bin/drive delete -i ${fileArray[i]} >> /home/pi/log/dfrobot_log.txt 2>&1
 done

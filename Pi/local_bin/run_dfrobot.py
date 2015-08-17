@@ -51,9 +51,15 @@ def homeRun( ):
     globContinue = True
     thread.start_new_thread(getNewImage, ())
 
-    correctApproach = False
+    correctApproachAngle = False
     correction = 0
     imgHeight, imgWidth = 0, 0
+    imgCount = 0
+    
+    # Remove tmp_img and tmp_tmp_img files to be sure no tmp images are left from a previous run.
+    stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
+    own_util.writeToLogFile(stdOutAndErr + '\n')
+
     while globContinue == True:
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
@@ -64,8 +70,6 @@ def homeRun( ):
             img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             
             imgHeight, imgWidth = img.shape[:2]
-            if doPrint:
-                print 'imgWidth, imgHeight:', imgWidth, imgHeight
             
             # Set constants which depend on the size of the image.
             imgWidthFactor = imgWidth / 640.0  # calibrated with 640 * 480 image
@@ -73,7 +77,7 @@ def homeRun( ):
             imgAreaFactor = (imgWidth * imgHeight) / (640.0 * 480.0)  # calibrated with 640 * 480 image
             sizeCorrect = 20.0 * imgWidthFactor  # calibrated with 640 * 480 image
             sizeSlow = 20.0 * imgWidthFactor  # calibrated with 640 * 480 image
-            sizeStop = 35.0 * imgWidthFactor  # calibrated with 640 * 480 image
+            sizeStop = 40.0 * imgWidthFactor  # calibrated with 640 * 480 image
     
             # Get average brightness of hsv image by averaging the 'v' (value or brightness) bytes.
             totalPixel = cv2.sumElems(img_hsv)
@@ -96,7 +100,7 @@ def homeRun( ):
             # In addition tt is observed that in that case invalid keypoint coordinates are produced: nan (not a number).
             # When filterByArea is set to True with a minArea > 0 this problem does not occur.
             params.filterByArea = True
-            params.minArea = 50 * imgAreaFactor
+            params.minArea = 100 * imgAreaFactor
             params.maxArea = 100000 * imgAreaFactor
 
             # Filter by Circularity
@@ -152,7 +156,7 @@ def homeRun( ):
                         blobMiddle = blobRight
                         blobRight = None
 
-            if correctApproach:
+            if correctApproachAngle:
                 # Going to check and correct the approach angle.
                 if correction > 1.5:  # we have to turn to the left, move forward and then turn back again
                     if doPrint:
@@ -163,22 +167,22 @@ def homeRun( ):
                         else:
                             print '********** No valid blobs found.'
                     own_util.move('left', 240 - correction * 1, 1.0, doMove)
-                    own_util.move('forward', 128 + correction * 3, 1.0, doMove)
+                    own_util.move('forward', 130 + correction * 3, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
                     own_util.move('right', 240 - correction * 1, 5.0, doMove)
                     # approach correction finished
-                    correctApproach = False
+                    correctApproachAngle = False
                     if doPrint:
                         print 'Approach correction Finished.'
                 elif correction < -1.5:  # we have to turn to the right, move forward and then turn back again
                     if doPrint:
                         print 'Going to do approach correction to the right.'
                     own_util.move('right', 240 + correction * 1, 1.0, doMove)
-                    own_util.move('forward', 128 - correction * 3, 1.0, doMove)
+                    own_util.move('forward', 130 - correction * 3, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
                     own_util.move('left', 240 + correction * 1, 5.0, doMove)
                     # approach correction finished
-                    correctApproach = False
+                    correctApproachAngle = False
                     if doPrint:
                         print 'Approach correction finished.'
 
@@ -188,6 +192,7 @@ def homeRun( ):
                     print 'left:', blobLeft.pt[0], blobLeft.size, 'middle:', blobMiddle.pt[0], blobMiddle.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
                 # Go home!
                 xmid = (blobLeft.pt[0] + blobRight.pt[0]) / 2.0
+                ymid = (blobLeft.pt[1] + blobRight.pt[1]) / 2.0
                 course = imgWidth / 2.0
                 correction = (xmid - blobMiddle.pt[0]) / imgWidthFactor
                 if doPrint:
@@ -207,16 +212,20 @@ def homeRun( ):
                     else:
                         own_util.move('right', 128, 1.0, doMove)
                 elif abs(correction) > 2.0 and avgSizeBlobLeftBlobRight > sizeCorrect:
-                    correctApproach = True
+                    correctApproachAngle = True
                 else:
                     if avgSizeBlobLeftBlobRight < sizeStop:
                         if doPrint:
-                            print 'turn left'
+                            print 'move forward'
+                        # Move cam to vertically center the target.
+                        own_util.moveCamRel(30 * (imgHeight/2 - ymid) / imgHeight)
                         if avgSizeBlobLeftBlobRight < sizeSlow:
                             own_util.move('forward', 160, 1.0, doMove)
                         else:
                             own_util.move('forward', 140, 1.0, doMove)
                     else:
+                        # Move cam down again.
+                        own_util.moveCamAbs(0)
                         compass.gotoDegreeRel(180, doMove)
                         for i in range(0, 10):
                             own_util.move('backward', 140, 1.0, doMove)
@@ -239,10 +248,17 @@ def homeRun( ):
                 y = blob.pt[1]
                 cv2.circle(img, (int(x), int(y)), int(blob.size), (0, 255, 0), 2)
             
+            # Write images with name like 'tmp_img000042.jpg'.
+            # Use leading zeros to make sure order is correct when using shell filename expansion.
+            cv2.imwrite('/home/pi/DFRobotUploads/tmp_img' + str(imgCount).zfill(6) + '.jpg', img)
+            
             if doShow:
                 # Show keypoints
                 cv2.imshow("Keypoints", img)
                 cv2.waitKey(100)
+            
+            # Increase imgCount with a maximum for protection.
+            imgCount = (imgCount + 1) % 600
 
             # Ready with movement. Make globNewImageAvailable false to make sure a new image is taken after movement.
             globNewImageAvailableLock.acquire()
@@ -250,8 +266,15 @@ def homeRun( ):
             globNewImageAvailableLock.release()
         else:
             globNewImageAvailableLock.release()
+                
+    # Close the stream to have a correct administration of the number of connections.
     globStream.close()
-
+    # Convert the homerun images to a video and remove the images.
+    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(imgWidth) + ':h=' + str(imgHeight) + ':fps=2:type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
+    own_util.writeToLogFile(stdOutAndErr + '\n')
+    # Remove tmp_img and tmp_tmp_img files.
+    stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
+    own_util.writeToLogFile(stdOutAndErr + '\n')
 
 
 def motionDetection( ):
@@ -267,7 +290,14 @@ def motionDetection( ):
     img_gray = img_gray_prev = None
     imgCount = 0
     imgHeight = imgWidth = 0
-    startDetection = motionDetected = prevMotionDetected = motionDetected1 = motionDetected2 = motionDetected3 = False
+    startDetection = motionDetected = prevMotionDetected = False
+    noOfConsecutiveMotions = 0
+    firstImageIndex = 0
+    
+    # Remove tmp_img and tmp_tmp_img files to be sure no tmp images are left from a previous run.
+    stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
+    own_util.writeToLogFile(stdOutAndErr + '\n')
+
     while globContinue == True:
         stdOutAndErr = own_util.runShellCommandWait('netstat | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
         if int(stdOutAndErr) > 2:
@@ -302,17 +332,13 @@ def motionDetection( ):
                     # Start motion detection  after image is stabilized.
                     startDetection = True
                 if startDetection and noOfWhitePixels > 1000:
-                    # Consider motion detected only after three images in sequence with motion.
-                    if motionDetected1 == False:
-                        motionDetected1 = True
-                    elif motionDetected2 == False:
-                        motionDetected2 = True
-                    elif motionDetected3 == False:
-                        motionDetected3 = True
+                    # Consider motion detected only after sufficient images in sequence with motion.
+                    noOfConsecutiveMotions = noOfConsecutiveMotions + 1
+                    if noOfConsecutiveMotions == 4:
                         motionDetected = True
                 else:
                     # Reset, images with motion have to be in sequence.
-                    motionDetected1 = motionDetected2 = motionDetected3 = False
+                    noOfConsecutiveMotions = 0
                 if motionDetected == True:
                     # Motion is detected,
                     # now acquire motionDetectionBufferLength - motionDetectionBufferOffset new images.
@@ -329,31 +355,13 @@ def motionDetection( ):
                             print 'newImgCount:', newImgCount
 
                         if newImgCount == motionDetectionBufferLength - motionDetectionBufferOffset - 1:
-                            # Shift the motion detection images with motionDetectionBufferOffset.
-                            for i in range(0, motionDetectionBufferLength):
-                                # Rename images such that tmp_img000000.jpg is the first image to show in the movie.
-                                # Note that this is motionDetectionBufferOffset images before motion is detected.
-                                iOffset = i - (firstImageIndex - motionDetectionBufferOffset)
-                                # Map iOffset back into circular buffer.
-                                if iOffset < 0:
-                                    iOffset = iOffset + motionDetectionBufferLength
-                                elif iOffset >= motionDetectionBufferLength:
-                                    iOffset = iOffset - motionDetectionBufferLength
-                                stdOutAndErr = own_util.runShellCommandWait('mv /home/pi/DFRobotUploads/tmp_tmp_img' + str(i).zfill(6) + '.jpg' + ' /home/pi/DFRobotUploads/tmp_img' + str(iOffset).zfill(6) + '.jpg')
-                            # Motion detection images are shifted now. Convert the images to a video and remove the images.
-                            stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(imgWidth) + ':h=' + str(imgHeight) + ':fps=2:type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
-                            own_util.writeToLogFile(stdOutAndErr + '\n')
-                            # Remove tmp_img and tmp_tmp_img files.
-                            stdOutAndErr = own_util.runShellCommandWait('rm /home/pi/DFRobotUploads/tmp_*img*')
-                            own_util.writeToLogFile(stdOutAndErr + '\n')
-                            globStream.close()
+                            # All required images for this motion are captured, stop the capturing.
                             globContinue = False
-                            return True
 
-                if doShow:
-                    # Show motion
-                    cv2.imshow("Motion", img_bw_diff)
-                    cv2.waitKey(100)
+            if doShow:
+                # Show motion
+                cv2.imshow("Motion", img_bw_diff)
+                cv2.waitKey(100)
 
             # imgCount keeps position in circular buffer.
             imgCount = (imgCount + 1) % motionDetectionBufferLength
@@ -364,6 +372,32 @@ def motionDetection( ):
             globNewImageAvailableLock.release()
         else:
             globNewImageAvailableLock.release()
+
+    # Close the stream to have a correct administration of the number of connections.
+    globStream.close()
+    # Motion detection loop is finished. The images are in a circular buffer and the first image with
+    # motion is at firstImageIndex. Before this image there are motionDetectionBufferOffset images
+    # before the motion.
+    # Before we can make a movie we have to shift the motion detection images so the preamble
+    # starts at index 0.
+    for i in range(0, motionDetectionBufferLength):
+        # Rename images such that tmp_img000000.jpg is the first image to show in the movie.
+        # Note that this is motionDetectionBufferOffset images before motion is detected.
+        iOffset = i - (firstImageIndex - motionDetectionBufferOffset)
+        # Map iOffset back into circular buffer.
+        if iOffset < 0:
+            iOffset = iOffset + motionDetectionBufferLength
+        elif iOffset >= motionDetectionBufferLength:
+            iOffset = iOffset - motionDetectionBufferLength
+        # Rename the tmp_tmp_img file with index i to tmp_img files with the correct index iOffset.
+        stdOutAndErr = own_util.runShellCommandWait('mv /home/pi/DFRobotUploads/tmp_tmp_img' + str(i).zfill(6) + '.jpg' + ' /home/pi/DFRobotUploads/tmp_img' + str(iOffset).zfill(6) + '.jpg')
+    # Motion detection images are shifted now. Convert the images to a video and remove the images.
+    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(imgWidth) + ':h=' + str(imgHeight) + ':fps=2:type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
+    own_util.writeToLogFile(stdOutAndErr + '\n')
+    # Remove tmp_img and tmp_tmp_img files.
+    stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
+    own_util.writeToLogFile(stdOutAndErr + '\n')
+    return True
 
 
 # Main script.
@@ -420,26 +454,11 @@ if doFullRun:
 
             if motionDetected:
                 own_util.writeToLogFile('motion detected!\n')
-                # Going to upload the file to Google Drive using the 'drive' utility.
-                # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
-                # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
-                # This id can be obtained using 'drive list -t DFRobotUploads'.
-                # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
-                own_util.writeToLogFile('going to call \'drive\' to upload videofile\n')
-                stdOutAndErr = own_util.runShellCommandWait('/usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
-                own_util.writeToLogFile(stdOutAndErr + '\n')
-                own_util.writeToLogFile('going to call \'drive\' to upload logfile\n')
-                stdOutAndErr = own_util.runShellCommandWait('/usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt')
-                own_util.writeToLogFile(stdOutAndErr + '\n')
-
-                # Purge uploads to Google Drive to prevent filling up.
-                own_util.writeToLogFile('going to call going to call \'purge_dfrobot_uploads.sh\'\n')
-                # purge_dfrobot_uploads.sh is a bash script which writes to the logfile itself, so do not redirect output.
-                # This means we cannot use runShellCommandWait() or runShellCommandNowait().
-                p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh dfrobot_pivid_motion.avi 5', shell=True)
-                p.wait()
-                p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh dfrobot_log.txt 1', shell=True)
-                p.wait()
+                # Upload and purge the video file.
+                own_util.uploadAndPurge('dfrobot_pivid_motion.avi', 5)
 elif doHomeRun:
     # Home run
     homeRun()
+    # Upload and purge the video file.
+    own_util.uploadAndPurge('dfrobot_pivid_homerun.avi', 3)
+

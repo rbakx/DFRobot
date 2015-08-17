@@ -38,4 +38,44 @@ def move(direction, speed, delay, doMove):
         else:
             dir = 0
         stdOutAndErr = runShellCommandWait('i2c_cmd ' + str(dir) + ' ' + str(speed))
-        time.sleep(delay)
+    # Still delay when doMove == False to have similar timing.
+    time.sleep(delay)
+
+def moveCamRel(degrees):
+    if degrees >= -90 and degrees <= 90:
+        if degrees > 0:
+            stdOutAndErr = runShellCommandWait('i2c_cmd 10 ' + str(128 + degrees))
+        elif degrees < 0:
+            stdOutAndErr = runShellCommandWait('i2c_cmd 11 ' + str(128 - degrees))
+        # Delay for i2c communication.
+        time.sleep(0.1)
+
+def moveCamAbs(degrees):
+    if degrees >= 0 and degrees <= 90:
+        stdOutAndErr = runShellCommandWait('i2c_cmd 12 ' + str(128 + degrees))
+        # Delay for i2c communication.
+        time.sleep(0.1)
+
+def uploadAndPurge(filename, nrOfFilesToKeep):
+    # Going to upload the file to Google Drive using the 'drive' utility.
+    # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
+    # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
+    # This id can be obtained using 'drive list -t DFRobotUploads'.
+    # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
+    writeToLogFile('going to call \'drive\' to upload ' + filename + '\n')
+    # Run 'drive' as www-data to prevent Google Drive authentication problems.
+    stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/' + filename)
+    writeToLogFile(stdOutAndErr + '\n')
+    writeToLogFile('going to call \'drive\' to upload logfile\n')
+    # Run 'drive' as www-data to prevent Google Drive authentication problems.
+    stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt')
+    writeToLogFile(stdOutAndErr + '\n')
+                    
+    # Purge uploads to Google Drive to prevent filling up.
+    writeToLogFile('going to call going to call \'purge_dfrobot_uploads.sh\'\n')
+    # purge_dfrobot_uploads.sh is a bash script which writes to the logfile itself, so do not redirect output.
+    # This means we cannot use runShellCommandWait() or runShellCommandNowait().
+    p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh ' + filename + ' ' + str(nrOfFilesToKeep), shell=True)
+    p.wait()
+    p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh dfrobot_log.txt 1', shell=True)
+    p.wait()

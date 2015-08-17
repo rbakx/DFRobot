@@ -49,10 +49,7 @@ function handle_command {
         ( \
         killall vlc > /dev/null 2>&1 ;\
         # Going to upload the file to Google Drive using the 'drive' utility.
-        # 'sudo -u www-data' is used here to behave as the exact same www-data user
-        # as when the verification code was generated (using also sudo -u),
-        # else Google will ask for a new verification code.
-        # Apparently when Apache uses www-data it is different in a way.
+        # Run 'drive' as www-data to prevent Google Drive authentication problems.
         # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
         # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
         # This id can be obtained using 'drive list -t DFRobotUploads'.
@@ -63,8 +60,8 @@ function handle_command {
         sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt >> /home/pi/log/dfrobot_log.txt 2>&1 ;\
         # Going to purge previously uploaded files to prevent filling up Google Drive.
         echo "***** $(date), $prompt: going to call 'purge_dfrobot_uploads.sh'" >> /home/pi/log/dfrobot_log.txt ;\
-        sudo -u www-data purge_dfrobot_uploads.sh dfrobot_pivid_man.mp4 3 ;\
-        sudo -u www-data purge_dfrobot_uploads.sh dfrobot_log.txt 1 ;\
+        purge_dfrobot_uploads.sh dfrobot_pivid_man.mp4 3 ;\
+        purge_dfrobot_uploads.sh dfrobot_log.txt 1 ;\
     ) > /dev/null 2>&1 &
     elif [ "${1}" == "forward" ]
     then
@@ -85,11 +82,11 @@ function handle_command {
     elif [ "${1}" == "cam-up" ]
     then
         echo "***** $(date), $prompt: 'cam-up' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 10 > /dev/null 2>&1
+        i2c_cmd 10 ${2} > /dev/null 2>&1
     elif [ "${1}" == "cam-down" ]
     then
         echo "***** $(date), $prompt: 'cam-down' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 11 > /dev/null 2>&1
+        i2c_cmd 11 ${2} > /dev/null 2>&1
     elif [ "${1}" == "light-on" ]
     then
         echo "***** $(date), $prompt: 'light-on' command received" >> /home/pi/log/dfrobot_log.txt

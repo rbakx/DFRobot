@@ -63,7 +63,9 @@ def readCompass(debug = False):
     if debug == True:
         print 'raw X Y Z:', x_out_raw, y_out_raw, z_out_raw
         print 'corrected X Y and degrees:', int(x_out), int(y_out), round(degrees,2)
-    
+
+    # Delay for i2c communication.
+    time.sleep(0.1)
     return degrees
 
 # The below function is to test the compass and check which values to use for calibration.
