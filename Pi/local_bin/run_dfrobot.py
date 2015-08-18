@@ -13,6 +13,7 @@ import own_util
 doFullRun = False
 doHomeRun = False
 doPrint = False
+doTestMotion = False
 doShow = False
 doMove = True
 
@@ -340,8 +341,11 @@ def motionDetection( ):
                 if startDetection and noOfWhitePixels > 1000:
                     # Consider motion detected only after sufficient images in sequence with motion.
                     noOfConsecutiveMotions = noOfConsecutiveMotions + 1
-                    if noOfConsecutiveMotions == 4:
-                        motionDetected = True
+                    if noOfConsecutiveMotions >= 4:
+                        if doPrint:
+                            print '******************** MOTION DETECTED! ********************'
+                        if doTestMotion == False:
+                            motionDetected = True
                 else:
                     # Reset, images with motion have to be in sequence.
                     noOfConsecutiveMotions = 0
@@ -350,8 +354,6 @@ def motionDetection( ):
                     # now acquire motionDetectionBufferLength - motionDetectionBufferOffset new images.
                     # First determine where we are in the circular buffer.
                     if prevMotionDetected == False and motionDetected == True:
-                        if doPrint:
-                            print 'first time motion detected, noOfWhitePixels:', noOfWhitePixels
                         firstImageIndex = imgCount
                         newImgCount = 0
                         prevMotionDetected = True
@@ -417,10 +419,14 @@ for arg in sys.argv[1:]:  # The [1:] is to skip argv[0] which is the script name
         doHomeRun = True
     elif arg == '-print':
         doPrint = True
-    elif arg == '-nomove':
-        doMove = False
+    elif arg == '-testmotion':
+        doTestMotion = True
+        doFullRun = True
+        doPrint = True
     elif arg == '-show':
         doShow = True
+    elif arg == '-nomove':
+        doMove = False
     else:
         print 'illegal arguments, going to exit'
         own_util.writeToLogFile('illegal arguments, going to exit\n')
