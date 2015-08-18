@@ -322,53 +322,90 @@ def motionDetection( ):
             if img_gray != None:
                 img_gray_prev = img_gray.copy()
             img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
+            img_gray = cv2.GaussianBlur(img_gray, (21, 21), 0)
             
             imgHeight, imgWidth = img.shape[:2]
 
+            # Set constants which depend on the size of the image.
+            imgAreaFactor = (imgWidth * imgHeight) / (640.0 * 480.0)  # calibrated with 640 * 480 image
+                
+            if imgCount > 20:
+                # Start motion detection  after image is stabilized.
+                startDetection = True
+                        
+            if startDetection and img_gray_prev != None:
+                img_gray_diff = cv2.absdiff(img_gray, img_gray_prev)
+                img_bw_diff = cv2.threshold(img_gray_diff, 10, 255, cv2.THRESH_BINARY)[1]
+                (cnts, _) = cv2.findContours(img_bw_diff.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+                if doPrint:
+                    print 'number of contours:', len(cnts)
+
+                # Loop over the contours.
+                # If number of contours is too high, it is not normal motion.
+                if len(cnts) < 200:
+                    # xLeft, xRight, yTop, yBottom will be the coordinates of the outer bounding box of all contours.
+                    xLeft = imgWidth
+                    xRight = 0
+                    yTop = imgHeight
+                    yBottom = 0
+                    nofValidContours = 0
+                    for c in cnts:
+                        # If the contour is too small, ignore it.
+                        if cv2.contourArea(c) > 700 * imgAreaFactor:
+                            # Compute the outer bounding box of all valid contours.
+                            nofValidContours = nofValidContours + 1
+                            x,y,w,h = cv2.boundingRect(c)
+                            xLeft = x if x < xLeft else xLeft
+                            xRight = x+w if x+w > xRight else xRight
+                            yTop = y if y < yTop else yTop
+                            yBottom = y+h if y+h > yBottom else yBottom
+                            if doShow:
+                                # Only with -show option draw all the contours.
+                                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    if nofValidContours > 0:
+                        totalArea = (xRight - xLeft) * (yBottom - yTop)
+                        if doPrint:
+                            print 'total area:', totalArea
+                        if totalArea < (imgWidth * imgHeight) * 0.5:
+                            # Motion is detected for this image.
+                            # Consider true motion detected only after sufficient images in sequence with motion.
+                            noOfConsecutiveMotions = noOfConsecutiveMotions + 1
+                            if noOfConsecutiveMotions >= 3:
+                                if doPrint:
+                                    print '******************** MOTION DETECTED! ********************'
+                                # Draw the outer bounding box of all contours.
+                                cv2.rectangle(img, (xLeft, yTop), (xRight, yBottom), (0, 255, 255), 2)
+                                if doTestMotion == False:
+                                    motionDetected = True
+                        else:
+                            # Reset, images with motion have to be in sequence.
+                            noOfConsecutiveMotions = 0
+                
             # Write images with name like 'tmp_img000042.jpg'.
             # Use leading zeros to make sure order is correct when using shell filename expansion.
             cv2.imwrite('/home/pi/DFRobotUploads/tmp_tmp_img' + str(imgCount).zfill(6) + '.jpg', img)
-
-            if img_gray_prev != None:
-                img_gray_diff = cv2.absdiff(img_gray, img_gray_prev)
-                img_bw_diff = cv2.threshold(img_gray_diff, 20, 255, cv2.THRESH_BINARY)[1];
-                noOfWhitePixels = cv2.countNonZero(img_bw_diff)
-                if doPrint:
-                    print 'noOfWhitePixels:', noOfWhitePixels
-                if imgCount > 10:
-                    # Start motion detection  after image is stabilized.
-                    startDetection = True
-                if startDetection and noOfWhitePixels > 1000:
-                    # Consider motion detected only after sufficient images in sequence with motion.
-                    noOfConsecutiveMotions = noOfConsecutiveMotions + 1
-                    if noOfConsecutiveMotions >= 4:
-                        if doPrint:
-                            print '******************** MOTION DETECTED! ********************'
-                        if doTestMotion == False:
-                            motionDetected = True
+                
+            if motionDetected == True:
+                # Motion is detected,
+                # now acquire motionDetectionBufferLength - motionDetectionBufferOffset new images.
+                # First determine where we are in the circular buffer.
+                if prevMotionDetected == False and motionDetected == True:
+                    firstImageIndex = imgCount
+                    extraImgCount = 0
+                    prevMotionDetected = True
                 else:
-                    # Reset, images with motion have to be in sequence.
-                    noOfConsecutiveMotions = 0
-                if motionDetected == True:
-                    # Motion is detected,
-                    # now acquire motionDetectionBufferLength - motionDetectionBufferOffset new images.
-                    # First determine where we are in the circular buffer.
-                    if prevMotionDetected == False and motionDetected == True:
-                        firstImageIndex = imgCount
-                        newImgCount = 0
-                        prevMotionDetected = True
-                    else:
-                        newImgCount = newImgCount + 1
-                        if doPrint:
-                            print 'newImgCount:', newImgCount
+                    extraImgCount = extraImgCount + 1
+                    if doPrint:
+                        print 'capturing extra image no:', extraImgCount
 
-                        if newImgCount == motionDetectionBufferLength - motionDetectionBufferOffset - 1:
-                            # All required images for this motion are captured, stop the capturing.
-                            globContinue = False
+                    if extraImgCount == motionDetectionBufferLength - motionDetectionBufferOffset - 1:
+                        # All required images for this motion are captured, stop the capturing.
+                        globContinue = False
 
             if doShow:
                 # Show motion
-                cv2.imshow("Motion", img_bw_diff)
+                cv2.imshow("Motion", img)
                 cv2.waitKey(100)
 
             # imgCount keeps position in circular buffer.
