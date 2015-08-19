@@ -16,21 +16,29 @@ function handle_command {
     if [ "${1}" == "start-stream-hq" ]
     then
         echo "***** $(date), $prompt: 'start-stream-hq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Start capturing video stream. Stop previous capture first if any.
+        # Stop previous stream first if any.
         killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 10 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1
+        # Start capturing video stream. Execute in background to prevent blocking webpage refresh.
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 10 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1 &
+        # Force complete page refresh to correctly show the new MJPEG stream.
+        do_refresh_page=true
     elif [ "${1}" == "start-stream-lq" ]
     then
         echo "***** $(date), $prompt: 'start-stream-lq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Start low quality video stream. Stop previous stream first if any.
+        # Stop previous stream first if any.
         killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1
+        # Start low quality video stream. Execute in background to prevent blocking webpage refresh.
+        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1 &
+        # Force complete page refresh to correctly show the new MJPEG stream.
+        do_refresh_page=true
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
         killall mjpg_streamer > /dev/null 2>&1
+        # Force complete page refresh to correctly show the stopped MJPEG stream.
+        do_refresh_page=true
     elif [ "${1}" == "capture-start" ]
     then
         echo "***** $(date), $prompt: 'capture-start' command received" >> /home/pi/log/dfrobot_log.txt
@@ -98,7 +106,10 @@ function handle_command {
     elif [ "${1}" == "home-start" ]
     then
         echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
-        /usr/local/bin/run_dfrobot.py -homerun > /dev/null 2>&1
+        # Execute in background to prevent blocking webpage refresh.
+        /usr/local/bin/run_dfrobot.py -homerun > /dev/null 2>&1 &
+        # Force complete page refresh to correctly show the new MJPEG stream.
+        do_refresh_page=true
     elif [ "${1}" == "home-stop" ]
     then
         echo "***** $(date), $prompt: 'home-stop' command received" >> /home/pi/log/dfrobot_log.txt
@@ -110,13 +121,14 @@ function handle_command {
     elif [ "${1}" == "status" ]
     then
         echo "***** $(date), $prompt: 'status' command received" >> /home/pi/log/dfrobot_log.txt
-        do_update=true
+        do_refresh_frame=true
     fi
 }
 
-# Set below value to true to have an html frame refresh for every form action (like a button click).
-# On most devices this is not needed, except for an iPad.
-do_update=false
+# Refresh frame is default false. Only when a new status frame is needed, the value will be set to true.
+do_refresh_frame=false
+# Refresh page is default false. Only when a new MJPEG stream has to be loaded, the value will be set to true.
+do_refresh_page=false
 
 # CGI POST method handling code below taken from http://tuxx-home.at/cmt.php?article=/2005/06/17/T09_07_39/index.html
 if [ "$REQUEST_METHOD" = "POST" ]; then
@@ -152,7 +164,23 @@ fi
 
 #echo -e "Location: ../index1.html\n"
 
-if [ $do_update = false ]
+if [ $do_refresh_page = true ]
+then
+    # If $do_refresh_page = true then the complete page has to be refreshed.
+    # Reason for a complete page refresh is to correctly show a new MJPEG stream.
+    # The page refresh is done by returning html which calls javascript function parent.location.reload().
+    # First delay to make sure new the MJPEG stream is started.
+    # This is especially needed in case the run_dfrobot.py -homerun python script is called
+    # which will start a new MJPEG stream but takes a second to start.
+    sleep 3
+    echo -e "Content-type: text/html\n"
+    echo -e "<html><head>\n"
+    echo -e "<meta http-equiv=\"refresh\" content=\"5\">\n"
+    echo -e "<script language=\"javascript\" type=\"text/javascript\">\n"
+    echo -e "parent.location.reload();\n"
+    echo -e "</script>\n"
+    echo -e "</head></html>"
+elif [ $do_refresh_frame = false ]
 then
     echo -e "Status:304\n"
 else
