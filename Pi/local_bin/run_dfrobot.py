@@ -2,7 +2,6 @@
 import cv2
 import numpy as np
 import urllib
-import subprocess
 import sys
 import os
 import time
@@ -11,6 +10,7 @@ import compass
 import own_util
 
 # General constants
+SendTextOrImageToWhatsApp = 'Image'  # Fill in 'Text' or 'Image'
 ImgWidth = 800
 ImgHeight = 600
 Fps = 2
@@ -18,8 +18,6 @@ DirectionFront = 293.0
 DirectionRight = 25.0
 DirectionBack = 115.0
 DirectionLeft = 203.0
-MotionDetectionBufferLength = Fps * 30 # number of images in motion detection buffer
-MotionDetectionBufferOffset = Fps * 3  # number of images that are kept before the motion is detected
 # Constants which depend on the image format.
 ImgWidthFactor = ImgWidth / 640.0  # calibrated with 640 * 480 image
 ImgHeightFactor = ImgHeight / 480.0  # calibrated with 640 * 480 image
@@ -29,6 +27,8 @@ SizeCorrect = 20.0 * ImgWidthFactor  # calibrated with 640 * 480 image
 SizeSlow = 20.0 * ImgWidthFactor  # calibrated with 640 * 480 image
 SizeStop = 40.0 * ImgWidthFactor  # calibrated with 640 * 480 image
 # Motion detection constants
+MotionDetectionBufferLength = Fps * 30 # number of images in motion detection buffer
+MotionDetectionBufferOffset = Fps * 3  # number of images that are kept before the motion is detected
 GrayLevelDifferenceTreshold = 20
 MinContourArea = 100 * ImgAreaFactor
 # Upload constants
@@ -381,13 +381,23 @@ def motionDetection( ):
                 
             # Write images with name like 'tmp_img000042.jpg'.
             # Use leading zeros to make sure order is correct when using shell filename expansion.
-            cv2.imwrite('/home/pi/DFRobotUploads/tmp_tmp_img' + str(imgCount).zfill(6) + '.jpg', img)
+            firstImageName = '/home/pi/DFRobotUploads/tmp_tmp_img' + str(imgCount).zfill(6) + '.jpg'
+            cv2.imwrite(firstImageName, img)
                 
             if motionDetected == True:
                 # Motion is detected,
                 # now acquire MotionDetectionBufferLength - MotionDetectionBufferOffset new images.
                 # First determine where we are in the circular buffer.
                 if prevMotionDetected == False and motionDetected == True:
+                    # Send first motion image or text to WhatsApp. Do it here so it will arrive fast!
+                    if doPrint:
+                        print 'motion detected, going to send message to WhatsApp'
+                    own_util.writeToLogFile('motion detected, going to send message to WhatsApp\n')
+                    if SendTextOrImageToWhatsApp == 'Text':
+                        own_util.sendWhatsAppMsg('Motion detected!')
+                    else:
+                        own_util.sendWhatsAppImg(firstImageName, 'Motion detected!')
+
                     firstImageIndex = imgCount
                     extraImgCount = 0
                     prevMotionDetected = True
@@ -433,6 +443,7 @@ def motionDetection( ):
             iOffset = iOffset - MotionDetectionBufferLength
         # Rename the tmp_tmp_img file with index i to tmp_img files with the correct index iOffset.
         stdOutAndErr = own_util.runShellCommandWait('mv /home/pi/DFRobotUploads/tmp_tmp_img' + str(i).zfill(6) + '.jpg' + ' /home/pi/DFRobotUploads/tmp_img' + str(iOffset).zfill(6) + '.jpg')
+        own_util.writeToLogFile(stdOutAndErr + '\n')
     # Motion detection images are shifted now. Convert the images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
     own_util.writeToLogFile(stdOutAndErr + '\n')
@@ -499,7 +510,9 @@ if doFullRun:
             stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
 
             if motionDetected:
-                own_util.writeToLogFile('motion detected!\n')
+                if doPrint:
+                    print 'motion detected, going to upload to Google Drive'
+                own_util.writeToLogFile('motion detected, going to upload to Google Drive\n')
                 # Upload and purge the video file.
                 own_util.uploadAndPurge('dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
 elif doHomeRun:

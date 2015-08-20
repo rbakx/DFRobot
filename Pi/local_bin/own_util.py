@@ -79,3 +79,28 @@ def uploadAndPurge(filename, nrOfFilesToKeep):
     p.wait()
     p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh dfrobot_log.txt 1', shell=True)
     p.wait()
+
+def sendWhatsAppMsg(msg):
+    p = subprocess.Popen('/home/pi/yowsup/yowsup-cli demos --yowsup --config /home/pi/yowsup/yowsup_config', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    p.stdin.write('/L\n')
+    p.stdin.write('/message send 31613484264' + ' "' + msg + '"' + '\n')
+    # Before disconnecting delay to give client time to send message.
+    time.sleep(2) # 0.4 seconds seems the bordercase here, so we take 2 seconds
+    p.stdin.write('/disconnect\n')
+    # There seems to be no command for exiting yowsup-cli client, so kill process
+    # First delay to give client time to disconnect.
+    time.sleep(1)
+    stdOutAndErr = runShellCommandWait('pkill -f yowsup')
+
+def sendWhatsAppImg(img, caption):
+    p = subprocess.Popen('/home/pi/yowsup/yowsup-cli demos --yowsup --config /home/pi/yowsup/yowsup_config', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    p.stdin.write('/L\n')
+    p.stdin.write('/image send 31613484264' + ' "' + img + '"' + ' "' + caption + '"' + '\n')
+    # Before disconnecting delay to give client time to send image.
+    time.sleep(5)  # 3 seconds seems the bordercase here for images of about 15 KB, so we take 5 seconds
+    p.stdin.write('/disconnect\n')
+    # There seems to be no command for exiting yowsup-cli client, so kill process
+    # First delay to give client time to disconnect.
+    time.sleep(1)
+    stdOutAndErr = runShellCommandWait('pkill -f yowsup')
+
