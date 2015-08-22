@@ -351,7 +351,7 @@ def motionDetection( ):
         elif re.search('awake', msg, re.IGNORECASE):
             own_util.sendWhatsAppMsg('I am awake for ' + own_util.getUptime())
         elif re.search('joke', msg, re.IGNORECASE):
-            own_util.sendWhatsAppMsg('\'What does your robot do, Sam?\' \'It collects data about the surrounding environment, then discards it and drives into walls\'')
+            own_util.sendWhatsAppMsg('\'What does your robot do, Sam?\' .......... \'It collects data about the surrounding environment, then discards it and drives into walls\'')
         elif re.search('picture', msg, re.IGNORECASE):
             if img != None:
                 # Save img to latest_img.jpg here to be sure it is not accessed while WhatsApp is sending.
@@ -437,9 +437,9 @@ def motionDetection( ):
                     if SendTextOrImageToWhatsApp == 'Text':
                         own_util.sendWhatsAppMsg('Motion detected!')
                     else:
-                        # Copy img to latest_img.jpg here to be sure it is not accessed while WhatsApp is sending.
-                        shutil.copy(firstImageName, '/home/pi/DFRobotUploads/latest_img.jpg')
-                        own_util.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'Motion detected!')
+                        # Copy img to motion_img.jpg here to be sure it is not accessed while WhatsApp is sending.
+                        shutil.copy(firstImageName, '/home/pi/DFRobotUploads/motion_img.jpg')
+                        own_util.sendWhatsAppImg('/home/pi/DFRobotUploads/motion_img.jpg', 'Motion detected!')
 
                     firstImageIndex = imgCount
                     extraImgCount = 0
