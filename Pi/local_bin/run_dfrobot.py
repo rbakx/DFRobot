@@ -4,6 +4,7 @@ import numpy as np
 import urllib
 import sys
 import os
+import shutil
 import getopt
 import time
 import thread
@@ -186,7 +187,7 @@ def homeRun( ):
                         else:
                             print '********** No valid blobs found.'
                     own_util.move('left', 240 - correction * 1, 1.0, doMove)
-                    own_util.move('forward', 130 + correction * 3, 1.0, doMove)
+                    own_util.move('forward', 128 + correction * 3, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
                     own_util.move('right', 240 - correction * 1, 5.0, doMove)
                     # approach correction finished
@@ -197,7 +198,7 @@ def homeRun( ):
                     if doPrint:
                         print 'Going to do approach correction to the right.'
                     own_util.move('right', 240 + correction * 1, 1.0, doMove)
-                    own_util.move('forward', 130 - correction * 3, 1.0, doMove)
+                    own_util.move('forward', 128 - correction * 3, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
                     own_util.move('left', 240 + correction * 1, 5.0, doMove)
                     # approach correction finished
@@ -436,7 +437,9 @@ def motionDetection( ):
                     if SendTextOrImageToWhatsApp == 'Text':
                         own_util.sendWhatsAppMsg('Motion detected!')
                     else:
-                        own_util.sendWhatsAppImg(firstImageName, 'Motion detected!')
+                        # Copy img to latest_img.jpg here to be sure it is not accessed while WhatsApp is sending.
+                        shutil.copy(firstImageName, '/home/pi/DFRobotUploads/latest_img.jpg')
+                        own_util.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'Motion detected!')
 
                     firstImageIndex = imgCount
                     extraImgCount = 0
@@ -482,8 +485,11 @@ def motionDetection( ):
         elif iOffset >= MotionDetectionBufferLength:
             iOffset = iOffset - MotionDetectionBufferLength
         # Rename the tmp_tmp_img file with index i to tmp_img files with the correct index iOffset.
-        stdOutAndErr = own_util.runShellCommandWait('mv /home/pi/DFRobotUploads/tmp_tmp_img' + str(i).zfill(6) + '.jpg' + ' /home/pi/DFRobotUploads/tmp_img' + str(iOffset).zfill(6) + '.jpg')
-        myLog.info(stdOutAndErr)
+        # As we are not sure all MotionDetectionBufferLength tmp_tmp_img* images are really created, we accept exceptions here.
+        try:
+            shutil.move('/home/pi/DFRobotUploads/tmp_tmp_img' + str(i).zfill(6) + '.jpg', '/home/pi/DFRobotUploads/tmp_img' + str(iOffset).zfill(6) + '.jpg')
+        except:
+            pass
     # Motion detection images are shifted now. Convert the images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
     myLog.info(stdOutAndErr)
