@@ -107,7 +107,7 @@ function handle_command {
     then
         echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
         # Execute in background to prevent blocking webpage refresh.
-        /usr/local/bin/run_dfrobot.py -homerun > /dev/null 2>&1 &
+        /usr/local/bin/run_dfrobot.py --log="/home/pi/log/dfrobot_homerunlog.txt" --homerun > /dev/null 2>&1 &
         # Force complete page refresh to correctly show the new MJPEG stream.
         do_refresh_page=true
     elif [ "${1}" == "home-stop" ]

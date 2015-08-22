@@ -7,20 +7,7 @@ import thread
 import re
 import inspect
 import fcntl
-
-def writeToLogFile(str):
-    if str != '':
-        logFileName = '/home/pi/log/dfrobot_log.txt'
-        if os.stat(logFileName).st_size > 1000000:
-            open(logFileName, 'w').close()
-        
-        # Get filename of the module which called this function so it can be used in the prompt.
-        frm = inspect.stack()[1]
-        mod = inspect.getmodule(frm[0])
-        prompt = '***** ' + time.strftime("%Y-%m-%d %H:%M") + ', ' + mod.__file__ + ': '
-        logFile = open(logFileName, 'a')
-        logFile.write(prompt + str + '\n')
-        logFile.close()
+import logging
 
 def runShellCommandWait( cmd ):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
@@ -81,34 +68,30 @@ def getUptime():
     else:
         return 'unknown'
 
-def uploadAndPurge(filename, nrOfFilesToKeep):
+def uploadAndPurge(filepath, nrOfFilesToKeep):
     # Going to upload the file to Google Drive using the 'drive' utility.
     # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
     # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
     # This id can be obtained using 'drive list -t DFRobotUploads'.
     # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
-    writeToLogFile('going to call \'drive\' to upload ' + filename)
+    logging.getLogger("MyLog").info('going to call \'drive\' to upload ' + filepath)
     # Run 'drive' as www-data to prevent Google Drive authentication problems.
-    stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/' + filename)
-    writeToLogFile(stdOutAndErr)
-    writeToLogFile('going to call \'drive\' to upload logfile')
-    # Run 'drive' as www-data to prevent Google Drive authentication problems.
-    stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt')
-    writeToLogFile(stdOutAndErr)
-                    
+    stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f ' + filepath)
+    logging.getLogger("MyLog").info(stdOutAndErr)
+    
     # Purge uploads to Google Drive to prevent filling up.
-    writeToLogFile('going to call going to call \'purge_dfrobot_uploads.sh\'')
+    logging.getLogger("MyLog").info('going to call \'purge_dfrobot_uploads.sh\'')
     # purge_dfrobot_uploads.sh is a bash script which writes to the logfile itself, so do not redirect output.
     # This means we cannot use runShellCommandWait() or runShellCommandNowait().
-    p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh ' + filename + ' ' + str(nrOfFilesToKeep), shell=True)
-    p.wait()
-    p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh dfrobot_log.txt 1', shell=True)
+    p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh ' + os.path.basename(filepath) + ' ' + str(nrOfFilesToKeep), shell=True)
     p.wait()
 
 def whatsAppClient():
     global globContinueWhatsApp
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
+    # BE CAREFUL: do not use logging.getLogger("MyLog").info() here, it wil lock up!
+    # According to the documentation the Python logging should be thread safe, but still it locks up if used here.
     # Start Yowsup client. Through pipes it communicates with this thread. Default the pipes are buffering
     # which makes that the communication blocks. Therefore the -u option is which will put stdout in unbuffered mode.
     # For stdin we use stdin.flush() below.
@@ -137,7 +120,6 @@ def whatsAppClient():
         else: # got line
             m = expr.match(line)
             if m != None:
-                writeToLogFile('whatsAppClient: WhatsApp message received: "' + m.group(1) + '"')
                 globMsgInAvailableLock.acquire()
                 globMsgIn = m.group(1)
                 globMsgInAvailable = True
@@ -147,10 +129,8 @@ def whatsAppClient():
         globMsgOutAvailableLock.acquire()
         if globMsgOutAvailable:
             if globMsgOutType == 'Image':
-                writeToLogFile('whatsAppClient: going to send WhatsApp image ' + globImgOut + ' with caption "' + globMsgOut + '"')
                 p.stdin.write('/image send 31613484264' + ' "' + globImgOut + '"' + ' "' + globMsgOut + '"' + '\n')
             else:
-                writeToLogFile('whatsAppClient: going to send WhatsApp message "' + globMsgOut + '"')
                 p.stdin.write('/message send 31613484264 "' + globMsgOut + '"\n')
             # Flush the stdin pipe otherwise the command will not get through.
             p.stdin.flush()
@@ -163,7 +143,7 @@ def startWhatsAppClient():
     global globContinueWhatsApp
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutAvailable, globMsgOutAvailableLock
-    writeToLogFile('going to start whatsAppClient')
+    logging.getLogger("MyLog").info('going to start whatsAppClient')
     globMsgInAvailableLock = thread.allocate_lock()
     globMsgOutAvailableLock = thread.allocate_lock()
     globContinueWhatsApp = True
@@ -172,11 +152,12 @@ def startWhatsAppClient():
 
 def stopWhatsAppClient():
     global globContinueWhatsApp
-    writeToLogFile('going to stop whatsAppClient')
+    logging.getLogger("MyLog").info('going to stop whatsAppClient')
     globContinueWhatsApp = False
 
 def sendWhatsAppMsg(msg):
     global globMsgOut, globMsgOutType, globMsgOutAvailable, globMsgOutAvailableLock
+    logging.getLogger("MyLog").info('going to send WhatsApp message "' + msg + '"')
     globMsgOutAvailableLock.acquire()
     globMsgOut = msg
     globMsgOutType = 'Text'
@@ -185,6 +166,7 @@ def sendWhatsAppMsg(msg):
 
 def sendWhatsAppImg(img, caption):
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
+    logging.getLogger("MyLog").info('going to send WhatsApp image ' + img + ' with caption "' + caption + '"')
     globMsgOutAvailableLock.acquire()
     globImgOut = img
     globMsgOut = caption
@@ -199,5 +181,6 @@ def receiveWhatsAppMsg():
     if globMsgInAvailable:
         msg = globMsgIn
         globMsgInAvailable = False
+        logging.getLogger("MyLog").info('WhatsApp message received: "' + msg + '"')
     globMsgInAvailableLock.release()
     return msg

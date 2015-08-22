@@ -4,10 +4,14 @@ import numpy as np
 import urllib
 import sys
 import os
+import getopt
 import time
 import thread
 import re
 import compass
+import logging
+from logging import Formatter
+from logging.handlers import RotatingFileHandler
 import own_util
 
 # General constants
@@ -77,7 +81,7 @@ def homeRun( ):
     
     # Remove tmp_img and tmp_tmp_img files to be sure no tmp images are left from a previous run.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
-    own_util.writeToLogFile(stdOutAndErr)
+    myLog.info(stdOutAndErr)
 
     while globContinue == True:
         globNewImageAvailableLock.acquire()
@@ -212,14 +216,14 @@ def homeRun( ):
                 correction = (xmid - blobMiddle.pt[0]) / ImgWidthFactor
                 if doPrint:
                     print 'xmid, course, correction:', xmid, course, correction
-                if xmid < course - ImgWidth / 30.0:
+                if xmid < course - ImgWidth / 20.0:
                     if doPrint:
                         print 'turn left'
                     if xmid < course - ImgWidth / 5.0:
                         own_util.move('left', 140, 1.0, doMove)
                     else:
                         own_util.move('left', 128, 1.0, doMove)
-                elif xmid > course + ImgWidth / 30.0:
+                elif xmid > course + ImgWidth / 20.0:
                     if doPrint:
                         print 'turn right'
                     if xmid > course + ImgWidth / 5.0:
@@ -242,21 +246,21 @@ def homeRun( ):
                         # Move cam down again.
                         own_util.moveCamAbs(0)
                         compass.gotoDegreeRel(180, doMove)
-                        for i in range(0, 10):
+                        for i in range(0, 8):
                             own_util.move('backward', 140, 1.0, doMove)
-                        own_util.writeToLogFile('Home found!')
+                        myLog.info('Home found!')
                         globContinue = False
 
             elif len(sortedBlobs) > 0:
                 if doPrint:
                     print '**********', len(sortedBlobs), 'Blobs found, but not valid.'
                     print 'turn left'
-                own_util.move('left', 160, 1.0, doMove)
+                own_util.move('left', 150, 1.0, doMove)
             else:
                 if doPrint:
                     print '********** No blobs found.'
                     print 'turn left'
-                own_util.move('left', 160, 1.0, doMove)
+                own_util.move('left', 150, 1.0, doMove)
 
             for blob in sortedBlobs:
                 x = blob.pt[0]
@@ -286,10 +290,10 @@ def homeRun( ):
     globStream.close()
     # Convert the homerun images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
-    own_util.writeToLogFile(stdOutAndErr)
+    myLog.info(stdOutAndErr)
     # Remove tmp_img and tmp_tmp_img files.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
-    own_util.writeToLogFile(stdOutAndErr)
+    myLog.info(stdOutAndErr)
 
 
 def motionDetection( ):
@@ -310,14 +314,14 @@ def motionDetection( ):
     
     # Remove tmp_img and tmp_tmp_img files to be sure no tmp images are left from a previous run.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
-    own_util.writeToLogFile(stdOutAndErr)
+    myLog.info(stdOutAndErr)
 
     while globContinue == True:
         stdOutAndErr = own_util.runShellCommandWait('netstat | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
         if int(stdOutAndErr) > 2:
             if doPrint:
                 print 'stopping motion detection because there are active connections:', stdOutAndErr
-            own_util.writeToLogFile('stopping motion detection because there are extra connections')
+            myLog.info('stopping motion detection because there are extra connections')
             globStream.close()
             globContinue = False
             return False
@@ -354,13 +358,13 @@ def motionDetection( ):
                 own_util.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'here is your picture')
         elif msg != '':
             own_util.sendWhatsAppMsg('no comprendo')
-    
+
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
         if newImageAvailable:
             img = globImg.copy()
             globNewImageAvailableLock.release()
-            
+    
             if img_gray != None:
                 img_gray_prev = img_gray.copy()
             img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
@@ -428,7 +432,7 @@ def motionDetection( ):
                     # Send first motion image or text to WhatsApp. Do it here so it will arrive fast!
                     if doPrint:
                         print 'motion detected, going to send message to WhatsApp'
-                    own_util.writeToLogFile('motion detected, going to send message to WhatsApp')
+                    myLog.info('motion detected, going to send message to WhatsApp')
                     if SendTextOrImageToWhatsApp == 'Text':
                         own_util.sendWhatsAppMsg('Motion detected!')
                     else:
@@ -479,39 +483,60 @@ def motionDetection( ):
             iOffset = iOffset - MotionDetectionBufferLength
         # Rename the tmp_tmp_img file with index i to tmp_img files with the correct index iOffset.
         stdOutAndErr = own_util.runShellCommandWait('mv /home/pi/DFRobotUploads/tmp_tmp_img' + str(i).zfill(6) + '.jpg' + ' /home/pi/DFRobotUploads/tmp_img' + str(iOffset).zfill(6) + '.jpg')
-        own_util.writeToLogFile(stdOutAndErr)
+        myLog.info(stdOutAndErr)
     # Motion detection images are shifted now. Convert the images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
-    own_util.writeToLogFile(stdOutAndErr)
+    myLog.info(stdOutAndErr)
     # Remove tmp_img and tmp_tmp_img files.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
-    own_util.writeToLogFile(stdOutAndErr)
+    myLog.info(stdOutAndErr)
     return True
 
-
+def createMyLog(path):
+    global myLog
+    myLog = logging.getLogger("MyLog")
+    myLog.setLevel(logging.INFO)
+    
+    # add a rotating handler
+    FORMAT = '%(asctime)-15s %(levelname)-6s %(message)s'
+    DATE_FORMAT = '%b %d %H:%M:%S'
+    formatter = Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
+    handler = RotatingFileHandler(path, maxBytes=1000000, backupCount=0)
+    handler.setFormatter(formatter)
+    myLog.addHandler(handler)
+                                  
 # Main script.
-own_util.writeToLogFile('START LOG  *****')
+global myLog
+logFilePath = ''
 
 # Handle arguments.
-for arg in sys.argv[1:]:  # The [1:] is to skip argv[0] which is the script name.
-    if arg == '-fullrun':
+try:
+    # The [1:] in sys.argv[1:] is to skip argv[0] which is the script name.
+    opts, args = getopt.getopt(sys.argv[1:],"",["log=","fullrun","homerun","print","testmotion","show","nomove"])
+except getopt.GetoptError:
+    print 'run_dfrobot.py --log <logfilepath> [--fullrun] [--homerun] [--print] [--testmotion] [--show] [--nomove]'
+    sys.exit(2)
+for opt, arg in opts:
+    if opt == '--log':
+        logFilePath = arg
+    elif opt == '--fullrun':
         doFullRun = True
-    elif arg == '-homerun':
+    elif opt == '--homerun':
         doHomeRun = True
-    elif arg == '-print':
+    elif opt == '--print':
         doPrint = True
-    elif arg == '-testmotion':
+    elif opt == '--testmotion':
         doTestMotion = True
         doFullRun = True
         doPrint = True
-    elif arg == '-show':
+    elif opt == '--show':
         doShow = True
-    elif arg == '-nomove':
+    elif opt == '--nomove':
         doMove = False
-    else:
-        print 'illegal arguments, going to exit'
-        own_util.writeToLogFile('illegal arguments, going to exit')
-        exit(1)
+
+# Create logger.
+createMyLog(logFilePath)
+myLog.info('START LOG  *****')
 
 # This script can run the robot in different modes:
 # Full run:
@@ -534,13 +559,13 @@ if doFullRun:
                 print 'not going to do full run because there are active connections:', stdOutAndErr
         else:
             # Start MJPEG stream. Stop previous stream first if any.
-            own_util.writeToLogFile('going to start stream')
+            myLog.info('going to start stream')
             stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
             time.sleep(0.5)
             own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
             # Delay to give stream time to start up and camera to stabilize.
             time.sleep(5)
-            own_util.writeToLogFile('going to call detectMotion()')
+            myLog.info('going to call motionDetection()')
             # Call motionDetection(). This function returns with True when motion is detected
             # and dfrobot_pivid_motion.avi is created. It returns false when no motion is detected but other
             # connectios are becoming active.
@@ -551,19 +576,21 @@ if doFullRun:
             if motionDetected:
                 if doPrint:
                     print 'motion detected, going to upload to Google Drive'
-                own_util.writeToLogFile('motion detected, going to upload to Google Drive')
-                # Upload and purge the video file.
-                own_util.uploadAndPurge('dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
+                myLog.info('motion detected, going to upload to Google Drive')
+                # Upload and purge the video file and log file.
+                own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
+                own_util.uploadAndPurge(logFilePath, 1)
 elif doHomeRun:
     # Home run
     # Start MJPEG stream. Stop previous stream first if any.
-    own_util.writeToLogFile('going to start stream')
+    myLog.info('going to start stream')
     stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
     time.sleep(0.5)
     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
     # Delay to give stream time to start up and camera to stabilize.
     time.sleep(5)
     homeRun()
-    # Upload and purge the video file.
-    own_util.uploadAndPurge('dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
+    # Upload and purge the video file and log file.
+    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
+    own_util.uploadAndPurge(logFilePath, 1)
 
