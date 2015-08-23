@@ -101,7 +101,7 @@ def uploadAndPurge(filepath, nrOfFilesToKeep):
     p.wait()
 
 def whatsAppClient():
-    global globContinueWhatsApp
+    global globContinueWhatsApp, globRestartWhatsAppClient
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
     # BE CAREFUL: do not use logging.getLogger("MyLog").info() here, it wil lock up!
@@ -130,6 +130,10 @@ def whatsAppClient():
         # Run in try/except to catch and log all errors. Keep this thread running because
         # when this thread ends between an acquire() and release(), it will block other threads.
         try:
+            # First send something to test whether the stdin pipe to yowsup-cli is not broken.
+            # If it is broken, this will generate an exception and the whatsAppClient including
+            # yowsup-cli will be restarted.
+            p.stdin.write('/presence available\n')
             # ***** Handle input *****
             # Below use readline() and not read() because read() will return only after EOF is read which will
             # not happen as the Yowsup client keeps running. readline() instead reads until the end of a line.
@@ -171,30 +175,44 @@ def whatsAppClient():
                 globMsgOutAvailableLock.release()
         except Exception,e:
             logging.getLogger("MyLog").info('whatsAppClient exception: ' + str(e))
-                
+            # The yowsup-cli process seems not to be very stable, so we can get here.
+            # If yowsup-cli is crashed there will be a '[Errno 32] Broken pipe' error.
+            # In this case signal to call again stopWhatsAppClient() and startWhatsAppClient()
+            globRestartWhatsAppClient = True
+
     # There seems to be no command for exiting yowsup-cli client, so kill process.
     stdOutAndErr = runShellCommandWait('pkill -f yowsup')
 
 def startWhatsAppClient():
-    global globContinueWhatsApp
+    global globContinueWhatsApp, globRestartWhatsAppClient
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutAvailable, globMsgOutAvailableLock
     logging.getLogger("MyLog").info('going to start whatsAppClient')
     globMsgInAvailableLock = thread.allocate_lock()
     globMsgOutAvailableLock = thread.allocate_lock()
     globContinueWhatsApp = True
+    globRestartWhatsAppClient = False
     globMsgInAvailable = globMsgOutAvailable = False
     thread.start_new_thread(whatsAppClient, ())
     # The delay below is because if subprocess.Popen() is called right after this it hangs.
     # This is independent of the command called by subprocess.Popen().
     # The reason for his is still unknown.
-    # A delay of 0.01 s seems to be sufficient, but we take 0.5 s to be safe.
-    time.sleep(0.5)
+    # A delay of 0.01 s seems to be sufficient, but we take 1.0 sec to be safe.
+    time.sleep(1.0)
 
 def stopWhatsAppClient():
     global globContinueWhatsApp
     logging.getLogger("MyLog").info('going to stop whatsAppClient')
     globContinueWhatsApp = False
+    # Delay to make sure whatsAppClient is stopped.
+    time.sleep(1.0)
+
+def checkWhatsAppClient():
+    global globRestartWhatsAppClient
+    if globRestartWhatsAppClient:
+        logging.getLogger("MyLog").info('going to restart whatsAppClient')
+        stopWhatsAppClient()
+        startWhatsAppClient()
 
 def sendWhatsAppMsg(msg):
     global globMsgOut, globMsgOutType, globMsgOutAvailable, globMsgOutAvailableLock

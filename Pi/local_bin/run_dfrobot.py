@@ -332,8 +332,9 @@ def motionDetection( ):
             return False
     
         # Going to handle WhatsApp messages.
-        # This is done here as this is the loop which will continuously run,
-        # unless there is another active connection.
+        # This is done here as this is the loop which will continuously run, unless there is another active connection.
+        # First we check whether the whatsAppClient is still running which will restart it if needed.
+        own_util.checkWhatsAppClient()
         msg = own_util.receiveWhatsAppMsg()
         if re.search('hi', msg, re.IGNORECASE):
             own_util.sendWhatsAppMsg('hi there!')
