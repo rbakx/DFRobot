@@ -60,8 +60,10 @@ def getNewImage( ):
             jpg = globBytes[a:b+2]
             globBytes= globBytes[b+2:]
             
+            img = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8),cv2.CV_LOAD_IMAGE_COLOR)
+            # Keep critical section as short as possible.
             globNewImageAvailableLock.acquire()
-            globImg = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8),cv2.CV_LOAD_IMAGE_COLOR)
+            globImg = img
             globNewImageAvailable = True
             globNewImageAvailableLock.release()
 
@@ -85,10 +87,11 @@ def homeRun( ):
     myLog.info(stdOutAndErr)
 
     while globContinue == True:
+        # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
         if newImageAvailable:
-            img = globImg.copy()
+            img = globImg
             globNewImageAvailableLock.release()
             img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
             img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -281,6 +284,7 @@ def homeRun( ):
             imgCount = (imgCount + 1) % (Fps * 300)
 
             # Ready with movement. Make globNewImageAvailable false to make sure a new image is taken after movement.
+            # Keep critical section as short as possible.
             globNewImageAvailableLock.acquire()
             globNewImageAvailable = False
             globNewImageAvailableLock.release()
@@ -318,11 +322,11 @@ def motionDetection( ):
     myLog.info(stdOutAndErr)
 
     while globContinue == True:
-        stdOutAndErr = own_util.runShellCommandWait('netstat | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
-        if int(stdOutAndErr) > 2:
+        nofConnections = own_util.getNofConnections()
+        if nofConnections > 2:
             if doPrint:
-                print 'stopping motion detection because there are active connections:', stdOutAndErr
-            myLog.info('stopping motion detection because there are extra connections')
+                print 'stopping motion detection because there are extra connections:', str(nofConnections)
+            myLog.info('stopping motion detection because there are extra connections: ' + str(nofConnections))
             globStream.close()
             globContinue = False
             return False
@@ -360,10 +364,11 @@ def motionDetection( ):
         elif msg != '':
             own_util.sendWhatsAppMsg('no comprendo')
 
+        # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
         if newImageAvailable:
-            img = globImg.copy()
+            img = globImg
             globNewImageAvailableLock.release()
     
             if img_gray != None:
@@ -462,6 +467,7 @@ def motionDetection( ):
             imgCount = (imgCount + 1) % MotionDetectionBufferLength
             
             # Ready with this image. Make globNewImageAvailable false to make sure a new image is taken.
+            # Keep critical section as short as possible.
             globNewImageAvailableLock.acquire()
             globNewImageAvailable = False
             globNewImageAvailableLock.release()
@@ -485,10 +491,10 @@ def motionDetection( ):
         elif iOffset >= MotionDetectionBufferLength:
             iOffset = iOffset - MotionDetectionBufferLength
         # Rename the tmp_tmp_img file with index i to tmp_img files with the correct index iOffset.
-        # As we are not sure all MotionDetectionBufferLength tmp_tmp_img* images are really created, we accept exceptions here.
+        # As we are not sure all MotionDetectionBufferLength tmp_tmp_img* images are really created, we accept IOError exceptions here.
         try:
             shutil.move('/home/pi/DFRobotUploads/tmp_tmp_img' + str(i).zfill(6) + '.jpg', '/home/pi/DFRobotUploads/tmp_img' + str(iOffset).zfill(6) + '.jpg')
-        except:
+        except IOError:
             pass
     # Motion detection images are shifted now. Convert the images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
@@ -512,6 +518,14 @@ def createMyLog(path):
     myLog.addHandler(handler)
                                   
 # Main script.
+# This script can run the robot in different modes:
+# Full run:
+#   The robot does motion detection and uploads a video to Google Drive when motion is detected.
+#   Once every hour the robot drives out of its garage, makes an exploratory round
+#   and returns to the garage where it makes connection with the charging station.
+#   This video is also uploaded to Google Drive.
+# Home run:
+#   The robot finds and drives back to the garage where it makes connection with the charging station.
 global myLog
 logFilePath = ''
 
@@ -544,59 +558,63 @@ for opt, arg in opts:
 createMyLog(logFilePath)
 myLog.info('START LOG  *****')
 
-# This script can run the robot in different modes:
-# Full run:
-#   The robot does motion detection and uploads a video to Google Drive when motion is detected.
-#   Once every hour the robot drives out of its garage, makes an exploratory round
-#   and returns to the garage where it makes connection with the charging station.
-#   This video is also uploaded to Google Drive.
-# Home run:
-#   The robot finds and drives back to the garage where it makes connection with the charging station.
-if doFullRun:
-    # Full run
-    # In FullRun start WhatsApp client as FullRun is the process which runs continuously.
-    own_util.startWhatsAppClient()
-    own_util.sendWhatsAppMsg('I am up and running!')
-    while True:
-        # First check if there are active connections. If so, do not continue.
-        stdOutAndErr = own_util.runShellCommandWait('netstat | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
-        if int(stdOutAndErr) > 0:
-            if doPrint:
-                print 'not going to do full run because there are active connections:', stdOutAndErr
-        else:
-            # Start MJPEG stream. Stop previous stream first if any.
-            myLog.info('going to start stream')
-            stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
-            time.sleep(0.5)
-            own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
-            # Delay to give stream time to start up and camera to stabilize.
-            time.sleep(5)
-            myLog.info('going to call motionDetection()')
-            # Call motionDetection(). This function returns with True when motion is detected
-            # and dfrobot_pivid_motion.avi is created. It returns false when no motion is detected but other
-            # connectios are becoming active.
-            motionDetected = motionDetection()
-            # Stop MJPEG stream.
-            stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
 
-            if motionDetected:
+# Catch exceptions to able to log them.
+try:
+    if doFullRun:
+        # Full run
+        # In FullRun start WhatsApp client as FullRun is the process which runs continuously.
+        own_util.startWhatsAppClient()
+        own_util.sendWhatsAppMsg('I am up and running!')
+        logCount = 0
+        while True:
+            # First check if there are active connections. If so, do not continue.
+            nofConnections = own_util.getNofConnections()
+            if nofConnections > 0:
                 if doPrint:
-                    print 'motion detected, going to upload to Google Drive'
-                myLog.info('motion detected, going to upload to Google Drive')
-                # Upload and purge the video file and log file.
-                own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
-                own_util.uploadAndPurge(logFilePath, 1)
-elif doHomeRun:
-    # Home run
-    # Start MJPEG stream. Stop previous stream first if any.
-    myLog.info('going to start stream')
-    stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
-    time.sleep(0.5)
-    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
-    # Delay to give stream time to start up and camera to stabilize.
-    time.sleep(5)
-    homeRun()
-    # Upload and purge the video file and log file.
-    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
-    own_util.uploadAndPurge(logFilePath, 1)
+                    print 'not going to do full run because there are active connections:', str(nofConnections)
+                if logCount == 0:
+                    myLog.info('not going to do full run because there are active connections: ' + str(nofConnections))
+                    logCount = 1
+            else:
+                logCount = 0
+                # Start MJPEG stream. Stop previous stream first if any.
+                myLog.info('going to start stream')
+                stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
+                time.sleep(0.5)
+                own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                # Delay to give stream time to start up and camera to stabilize.
+                time.sleep(5)
+                myLog.info('going to call motionDetection()')
+                # Call motionDetection(). This function returns with True when motion is detected
+                # and dfrobot_pivid_motion.avi is created. It returns false when no motion is detected but other
+                # connectios are becoming active.
+                motionDetected = motionDetection()
+                # Stop MJPEG stream.
+                stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
+
+                if motionDetected:
+                    if doPrint:
+                        print 'motion detected, going to upload to Google Drive'
+                    myLog.info('motion detected, going to upload to Google Drive')
+                    # Upload and purge the video file and log file.
+                    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
+                    own_util.uploadAndPurge(logFilePath, 1)
+    elif doHomeRun:
+        # Home run
+        # Start MJPEG stream. Stop previous stream first if any.
+        myLog.info('going to start stream')
+        stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
+        time.sleep(0.5)
+        own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+        # Delay to give stream time to start up and camera to stabilize.
+        time.sleep(5)
+        homeRun()
+        # Upload and purge the video file and log file.
+        own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
+        own_util.uploadAndPurge(logFilePath, 1)
+except Exception,e:
+    myLog.info('run_dfrobot exception: ' + str(e))
+    raise
+
 

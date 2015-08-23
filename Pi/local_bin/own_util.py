@@ -15,6 +15,20 @@ def runShellCommandWait( cmd ):
 def runShellCommandNowait( cmd ):
     subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
 
+def getNofConnections():
+    stdOutAndErr = runShellCommandWait('netstat | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
+    return int(stdOutAndErr)
+
+# Below a psutil equivalent of netstat.
+# At the moment we do not use this because the output is difficult to parse and probably less stable than netstat.
+# The number of connections reported with this function is not the same as with getNofConnections()
+# due to different parsing, mostly it is one less.
+def getNofConnectionsPsUtil():
+    txt = str(psutil.net_connections(kind='tcp'))
+    rexp = re.compile('(44444|44445)\)[^\)]*\)[^\)]*ESTABLISHED\'')
+    match = rexp.findall(txt)
+    return len(match)
+
 def move(direction, speed, delay, doMove):
     if doMove:
         if direction == 'forward':
@@ -92,6 +106,7 @@ def whatsAppClient():
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
     # BE CAREFUL: do not use logging.getLogger("MyLog").info() here, it wil lock up!
     # According to the documentation the Python logging should be thread safe, but still it locks up if used here.
+    # Only in case of an exception we log for debugging.
     # Start Yowsup client. Through pipes it communicates with this thread. Default the pipes are buffering
     # which makes that the communication blocks. Therefore the -u option is which will put stdout in unbuffered mode.
     # For stdin we use stdin.flush() below.
@@ -102,40 +117,61 @@ def whatsAppClient():
     # This is what we want otherwise we cannot handle stdout and stdin in the same thread.
     fcntl.fcntl(p.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
     p.stdin.write('/L\n')
+    # Set presence as available. This will remain available as long as yowsup-cli remains running and
+    # WhatsApp will report status as 'online.
+    p.stdin.write('/presence available\n')
     
-    # Regulare expression to filter out message from yowsup-cli output
-    expr = re.compile('.*\[.*whatsapp.net.*\]\\s*(.*)')
+    # Regular expression to filter out message from yowsup-cli output,
+    expr = re.compile('.*\[.*whatsapp.net.*\]\\s*(.+)')
     while globContinueWhatsApp:
         # Sleep below to save CPU.
         time.sleep(1)
         
-        # ***** Handle input *****
-        # Below use readline() and not read() because read() will return only after EOF is read which will
-        # not happen as the Yowsup client keeps running. readline() instead reads until the end of a line.
-        # Using the fcntl above the readline() will not block, but generate an exception when there is no input.
+        # Run in try/except to catch and log all errors. Keep this thread running because
+        # when this thread ends between an acquire() and release(), it will block other threads.
         try:
-            line = p.stdout.readline()
-        except IOError:
-            pass
-        else: # got line
-            m = expr.match(line)
-            if m != None:
-                globMsgInAvailableLock.acquire()
-                globMsgIn = m.group(1)
-                globMsgInAvailable = True
-                globMsgInAvailableLock.release()
-            
-        # ***** Handle output *****
-        globMsgOutAvailableLock.acquire()
-        if globMsgOutAvailable:
-            if globMsgOutType == 'Image':
-                p.stdin.write('/image send 31613484264' + ' "' + globImgOut + '"' + ' "' + globMsgOut + '"' + '\n')
+            # ***** Handle input *****
+            # Below use readline() and not read() because read() will return only after EOF is read which will
+            # not happen as the Yowsup client keeps running. readline() instead reads until the end of a line.
+            # Using the fcntl above the readline() will not block, but throw an IOError exception
+            # when there is no input.
+            # Note that when the exception is not caught, this thread will end which will also end yowsup-cli.
+            try:
+                line = p.stdout.readline()
+            except IOError:
+                pass
+            else: # got line
+                m = expr.match(line)
+                if m != None:
+                    # Keep critical section as short as possible.
+                    globMsgInAvailableLock.acquire()
+                    globMsgIn = m.group(1)
+                    globMsgInAvailable = True
+                    globMsgInAvailableLock.release()
+
+            # ***** Handle output *****
+            # Keep critical section as short as possible.
+            globMsgOutAvailableLock.acquire()
+            if globMsgOutAvailable:
+                # Copy to keep critical section as short as possible.
+                msgOutType = globMsgOutType
+                if msgOutType == 'Image':
+                    imgOut = globImgOut
+                msgOut = globMsgOut
+                globMsgOutAvailable = False
+                globMsgOutAvailableLock.release()
+                
+                if msgOutType == 'Image':
+                    p.stdin.write('/image send 31613484264' + ' "' + imgOut + '"' + ' "' + msgOut + '"' + '\n')
+                else:
+                    p.stdin.write('/message send 31613484264 "' + msgOut + '"\n')
+                # Flush the stdin pipe otherwise the command will not get through.
+                p.stdin.flush()
             else:
-                p.stdin.write('/message send 31613484264 "' + globMsgOut + '"\n')
-            # Flush the stdin pipe otherwise the command will not get through.
-            p.stdin.flush()
-            globMsgOutAvailable = False
-        globMsgOutAvailableLock.release()
+                globMsgOutAvailableLock.release()
+        except Exception,e:
+            logging.getLogger("MyLog").info('whatsAppClient exception: ' + str(e))
+                
     # There seems to be no command for exiting yowsup-cli client, so kill process.
     stdOutAndErr = runShellCommandWait('pkill -f yowsup')
 
@@ -149,6 +185,11 @@ def startWhatsAppClient():
     globContinueWhatsApp = True
     globMsgInAvailable = globMsgOutAvailable = False
     thread.start_new_thread(whatsAppClient, ())
+    # The delay below is because if subprocess.Popen() is called right after this it hangs.
+    # This is independent of the command called by subprocess.Popen().
+    # The reason for his is still unknown.
+    # A delay of 0.01 s seems to be sufficient, but we take 0.5 s to be safe.
+    time.sleep(0.5)
 
 def stopWhatsAppClient():
     global globContinueWhatsApp
@@ -158,6 +199,7 @@ def stopWhatsAppClient():
 def sendWhatsAppMsg(msg):
     global globMsgOut, globMsgOutType, globMsgOutAvailable, globMsgOutAvailableLock
     logging.getLogger("MyLog").info('going to send WhatsApp message "' + msg + '"')
+    # Keep critical section as short as possible.
     globMsgOutAvailableLock.acquire()
     globMsgOut = msg
     globMsgOutType = 'Text'
@@ -167,6 +209,7 @@ def sendWhatsAppMsg(msg):
 def sendWhatsAppImg(img, caption):
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
     logging.getLogger("MyLog").info('going to send WhatsApp image ' + img + ' with caption "' + caption + '"')
+    # Keep critical section as short as possible.
     globMsgOutAvailableLock.acquire()
     globImgOut = img
     globMsgOut = caption
@@ -177,10 +220,13 @@ def sendWhatsAppImg(img, caption):
 def receiveWhatsAppMsg():
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     msg = ''
+    # Keep critical section as short as possible.
     globMsgInAvailableLock.acquire()
     if globMsgInAvailable:
         msg = globMsgIn
         globMsgInAvailable = False
+        globMsgInAvailableLock.release()
         logging.getLogger("MyLog").info('WhatsApp message received: "' + msg + '"')
-    globMsgInAvailableLock.release()
+    else:
+        globMsgInAvailableLock.release()
     return msg
