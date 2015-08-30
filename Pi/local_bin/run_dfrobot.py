@@ -13,6 +13,7 @@ import compass
 import logging
 from logging import Formatter
 from logging.handlers import RotatingFileHandler
+import whatsapp
 import own_util
 
 # General constants
@@ -333,37 +334,35 @@ def motionDetection( ):
     
         # Going to handle WhatsApp messages.
         # This is done here as this is the loop which will continuously run, unless there is another active connection.
-        # First we check whether the whatsAppClient is still running which will restart it if needed.
-        own_util.checkWhatsAppClient()
-        msg = own_util.receiveWhatsAppMsg()
+        msg = whatsapp.receiveWhatsAppMsg()
         if re.search('hi', msg, re.IGNORECASE):
-            own_util.sendWhatsAppMsg('hi there!')
+            whatsapp.sendWhatsAppMsg('hi there!')
         elif re.search('.*feel.*', msg, re.IGNORECASE):
             level = own_util.getBatteryLevel()
             if level != 'unknown':
                 if int(level) > 190:
-                    own_util.sendWhatsAppMsg('I feel great, my energy level is ' + level)
+                    whatsapp.sendWhatsAppMsg('I feel great, my energy level is ' + level)
                 elif int(level) > 170:
-                    own_util.sendWhatsAppMsg('I feel ok, my energy level is ' + level)
+                    whatsapp.sendWhatsAppMsg('I feel ok, my energy level is ' + level)
                 else:
-                    own_util.sendWhatsAppMsg('I feel a bit weak, my energy level is ' + level)
+                    whatsapp.sendWhatsAppMsg('I feel a bit weak, my energy level is ' + level)
             else:
-                own_util.sendWhatsAppMsg('I am not sure, my energy level is unknown')
+                whatsapp.sendWhatsAppMsg('I am not sure, my energy level is unknown')
         elif re.search('how are you', msg, re.IGNORECASE):
-            own_util.sendWhatsAppMsg('I am fine, thx for asking!')
+            whatsapp.sendWhatsAppMsg('I am fine, thx for asking!')
         elif re.search('battery', msg, re.IGNORECASE):
-            own_util.sendWhatsAppMsg('my battery level is ' + own_util.getBatteryLevel())
+            whatsapp.sendWhatsAppMsg('my battery level is ' + own_util.getBatteryLevel())
         elif re.search('awake', msg, re.IGNORECASE):
-            own_util.sendWhatsAppMsg('I am awake for ' + own_util.getUptime())
+            whatsapp.sendWhatsAppMsg('I am awake for ' + own_util.getUptime())
         elif re.search('joke', msg, re.IGNORECASE):
-            own_util.sendWhatsAppMsg('\'What does your robot do, Sam?\' .......... \'It collects data about the surrounding environment, then discards it and drives into walls\'')
+            whatsapp.sendWhatsAppMsg('\'What does your robot do, Sam?\' .......... \'It collects data about the surrounding environment, then discards it and drives into walls\'')
         elif re.search('picture', msg, re.IGNORECASE):
             if img != None:
                 # Save img to latest_img.jpg here to be sure it is not accessed while WhatsApp is sending.
                 cv2.imwrite('/home/pi/DFRobotUploads/latest_img.jpg', img)
-                own_util.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'here is your picture')
+                whatsapp.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'here is your picture')
         elif msg != '':
-            own_util.sendWhatsAppMsg('no comprendo')
+            whatsapp.sendWhatsAppMsg('no comprendo: ' + msg)
 
         # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
@@ -441,11 +440,11 @@ def motionDetection( ):
                         print 'motion detected, going to send message to WhatsApp'
                     myLog.info('motion detected, going to send message to WhatsApp')
                     if SendTextOrImageToWhatsApp == 'Text':
-                        own_util.sendWhatsAppMsg('Motion detected!')
+                        whatsapp.sendWhatsAppMsg('Motion detected!')
                     else:
                         # Copy img to motion_img.jpg here to be sure it is not accessed while WhatsApp is sending.
                         shutil.copy(firstImageName, '/home/pi/DFRobotUploads/motion_img.jpg')
-                        own_util.sendWhatsAppImg('/home/pi/DFRobotUploads/motion_img.jpg', 'Motion detected!')
+                        whatsapp.sendWhatsAppImg('/home/pi/DFRobotUploads/motion_img.jpg', 'Motion detected!')
 
                     firstImageIndex = imgCount
                     extraImgCount = 0
@@ -565,8 +564,16 @@ try:
     if doFullRun:
         # Full run
         # In FullRun start WhatsApp client as FullRun is the process which runs continuously.
-        own_util.startWhatsAppClient()
-        own_util.sendWhatsAppMsg('I am up and running!')
+        whatsapp.startWhatsAppClient()
+        whatsapp.sendWhatsAppMsg('I am up and running!')
+
+        # Start MJPEG stream. Stop previous stream first if any.
+        myLog.info('going to start stream')
+        own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+        # Delay to give stream time to start up and camera to stabilize.
+        time.sleep(5)
+        streamStarted = True
+    
         logCount = 0
         while True:
             # First check if there are active connections. If so, do not continue.
@@ -579,20 +586,19 @@ try:
                     logCount = 1
             else:
                 logCount = 0
-                # Start MJPEG stream. Stop previous stream first if any.
-                myLog.info('going to start stream')
-                stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
-                time.sleep(0.5)
-                own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
-                # Delay to give stream time to start up and camera to stabilize.
-                time.sleep(5)
+                
+                if streamStarted == False:
+                    myLog.info('going to start stream')
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Delay to give stream time to start up and camera to stabilize.
+                    time.sleep(5)
+                    streamStarted = True
+                        
                 myLog.info('going to call motionDetection()')
                 # Call motionDetection(). This function returns with True when motion is detected
                 # and dfrobot_pivid_motion.avi is created. It returns false when no motion is detected but other
                 # connectios are becoming active.
                 motionDetected = motionDetection()
-                # Stop MJPEG stream.
-                stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
 
                 if motionDetected:
                     if doPrint:
@@ -601,6 +607,13 @@ try:
                     # Upload and purge the video file and log file.
                     own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
                     own_util.uploadAndPurge(logFilePath, 1)
+                else:
+                    # There are extra connections so stop MJPEG stream.
+                    # Stop MJPEG stream.
+                    myLog.info('extra connections, going to stop stream')
+                    stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
+                    streamStarted = False
+
     elif doHomeRun:
         # Home run
         # Start MJPEG stream. Stop previous stream first if any.
