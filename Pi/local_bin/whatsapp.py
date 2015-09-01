@@ -1,10 +1,13 @@
 #!/usr/bin/python
 
 import os
+import shutil
 import sys
 import thread
+import re
 import logging
 import time
+import own_util
 
 from yowsup.layers                                      import YowLayerEvent
 from yowsup.layers.network                              import YowNetworkLayer
@@ -24,6 +27,10 @@ from yowsup.layers.axolotl                              import YowAxolotlLayer
 from yowsup.common                                      import YowConstants
 from yowsup.stacks                                      import YowStack, YOWSUP_CORE_LAYERS, YOWSUP_PROTOCOL_LAYERS_FULL
 from yowsup                                             import env
+
+# Global variables
+globDoMotionDetection = False
+globSendPicture = False
 
 
 class Disconnect(Exception):
@@ -183,9 +190,10 @@ def credentials():
 
 
 def whatsAppClient():
-    global globContinueWhatsApp, globRestartWhatsAppClient
+    global globContinueWhatsApp
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
+    global globDoMotionDetection, globSendPicture
 
     # YowAxolotlLayer added to prevent 'Unimplemented notification type "encrypt"' crash.
     layers=(SendReceiveLayer,)+(YOWSUP_PROTOCOL_LAYERS_FULL,YowAxolotlLayer)+YOWSUP_CORE_LAYERS
@@ -203,7 +211,8 @@ def whatsAppClient():
                 # Copy to keep critical section as short as possible.
                 msgOutType = globMsgOutType
                 if msgOutType == 'Image':
-                    imgOut = globImgOut
+                    imgOut = '/home/pi/DFRobotUploads/whatsapp_img.jpg'
+                    shutil.copy(globImgOut, imgOut)
                 msgOut = globMsgOut
                 globMsgOutAvailable = False
                 globMsgOutAvailableLock.release()
@@ -224,10 +233,43 @@ def whatsAppClient():
             stack.loop(timeout = 1.0, count=1)
             # Sleep to save cpu.
             time.sleep(1.0)
+    
+            # Handle messages.
+            msg = receiveWhatsAppMsg()
+            if re.search('.*motion.*on.*', msg, re.IGNORECASE):
+                globDoMotionDetection = True
+                sendWhatsAppMsg('motion detection is on')
+            elif re.search('.*motion.*off.*', msg, re.IGNORECASE):
+                globDoMotionDetection = False
+                sendWhatsAppMsg('motion detection is off')
+            elif re.search('picture', msg, re.IGNORECASE):
+                globSendPicture = True;
+            elif re.search('hi', msg, re.IGNORECASE):
+                sendWhatsAppMsg('hi there!')
+            elif re.search('.*feel.*', msg, re.IGNORECASE):
+                level = own_util.getBatteryLevel()
+                if level != 'unknown':
+                    if int(level) > 190:
+                        sendWhatsAppMsg('I feel great, my energy level is ' + level)
+                    elif int(level) > 170:
+                        sendWhatsAppMsg('I feel ok, my energy level is ' + level)
+                    else:
+                        sendWhatsAppMsg('I feel a bit weak, my energy level is ' + level)
+                else:
+                    sendWhatsAppMsg('I am not sure, my energy level is unknown')
+            elif re.search('how are you', msg, re.IGNORECASE):
+                sendWhatsAppMsg('I am fine, thx for asking!')
+            elif re.search('battery', msg, re.IGNORECASE):
+                sendWhatsAppMsg('my battery level is ' + own_util.getBatteryLevel())
+            elif re.search('awake', msg, re.IGNORECASE):
+                sendWhatsAppMsg('I am awake for ' + own_util.getUptime())
+            elif re.search('joke', msg, re.IGNORECASE):
+                sendWhatsAppMsg('\'What does your robot do, Sam?\' .......... \'It collects data about the surrounding environment, then discards it and drives into walls\'')
+            elif msg != '':
+                sendWhatsAppMsg('no comprendo: ' + msg)
+
         except Exception,e:
             logging.getLogger("MyLog").info('whatsAppClient exception: ' + str(e))
-            # Signal to restart whatsAppClient
-            globRestartWhatsAppClient = True
     try:
         stack.broadcastEvent(YowLayerEvent(SendReceiveLayer.EVENT_DISCONNECT))
     except Exception,e:
@@ -235,14 +277,13 @@ def whatsAppClient():
 
 
 def startWhatsAppClient():
-    global globContinueWhatsApp, globRestartWhatsAppClient
+    global globContinueWhatsApp
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutAvailable, globMsgOutAvailableLock
     logging.getLogger("MyLog").info('going to start whatsAppClient')
     globMsgInAvailableLock = thread.allocate_lock()
     globMsgOutAvailableLock = thread.allocate_lock()
     globContinueWhatsApp = True
-    globRestartWhatsAppClient = False
     globMsgInAvailable = globMsgOutAvailable = False
     thread.start_new_thread(whatsAppClient, ())
     # The delay below is to make sure we have connections.
@@ -261,8 +302,8 @@ def stopWhatsAppClient():
 
 def sendWhatsAppMsg(msg):
     global globMsgOut, globMsgOutType, globMsgOutAvailable, globMsgOutAvailableLock
-    logging.getLogger("MyLog").info('going to send WhatsApp message "' + msg + '"')
     # Keep critical section as short as possible.
+    logging.getLogger("MyLog").info('going to send WhatsApp message "' + msg + '"')
     globMsgOutAvailableLock.acquire()
     globMsgOut = msg
     globMsgOutType = 'Text'
@@ -272,10 +313,12 @@ def sendWhatsAppMsg(msg):
 
 def sendWhatsAppImg(img, caption):
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
-    logging.getLogger("MyLog").info('going to send WhatsApp image ' + img + ' with caption "' + caption + '"')
     # Keep critical section as short as possible.
     globMsgOutAvailableLock.acquire()
-    globImgOut = img
+    logging.getLogger("MyLog").info('going to send WhatsApp image ' + img + ' with caption "' + caption + '"')
+    # Copy img to motion_img.jpg here to be sure it is not accessed while WhatsApp is sending.
+    globImgOut = '/home/pi/DFRobotUploads/motion_img.jpg'
+    shutil.copy(img, globImgOut)
     globMsgOut = caption
     globMsgOutType = 'Image'
     globMsgOutAvailable = True
@@ -283,22 +326,15 @@ def sendWhatsAppImg(img, caption):
 
 
 def receiveWhatsAppMsg():
-    global globRestartWhatsAppClient
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     msg = ''
-    # Restart whatsAppClient if needed.
-    if globRestartWhatsAppClient:
-        logging.getLogger("MyLog").info('going to restart whatsAppClient')
-        stopWhatsAppClient()
-        startWhatsAppClient()
+    # Keep critical section as short as possible.
+    globMsgInAvailableLock.acquire()
+    if globMsgInAvailable:
+        msg = globMsgIn
+        globMsgInAvailable = False
+        logging.getLogger("MyLog").info('WhatsApp message received: "' + msg + '"')
+        globMsgInAvailableLock.release()
     else:
-        # Keep critical section as short as possible.
-        globMsgInAvailableLock.acquire()
-        if globMsgInAvailable:
-            msg = globMsgIn
-            globMsgInAvailable = False
-            globMsgInAvailableLock.release()
-            logging.getLogger("MyLog").info('WhatsApp message received: "' + msg + '"')
-        else:
-            globMsgInAvailableLock.release()
+        globMsgInAvailableLock.release()
     return msg

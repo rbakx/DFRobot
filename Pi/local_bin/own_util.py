@@ -8,10 +8,10 @@ import re
 import inspect
 import logging
 
-def runShellCommandWait( cmd ):
+def runShellCommandWait(cmd):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
 
-def runShellCommandNowait( cmd ):
+def runShellCommandNowait(cmd):
     subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
 
 def getNofConnections():
