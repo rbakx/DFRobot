@@ -190,7 +190,7 @@ def credentials():
 
 
 def whatsAppClient():
-    global globContinueWhatsApp
+    global globContinueWhatsApp, globRestartWhatsApp
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutType, globImgOut, globMsgOutAvailable, globMsgOutAvailableLock
     global globDoMotionDetection, globSendPicture
@@ -211,7 +211,9 @@ def whatsAppClient():
                 # Copy to keep critical section as short as possible.
                 msgOutType = globMsgOutType
                 if msgOutType == 'Image':
-                    imgOut = '/home/pi/DFRobotUploads/whatsapp_img.jpg'
+                    # Copy image to whatsapp_client_img.jpg so this image can be sent without another thread
+                    # overwriting the image.
+                    imgOut = '/home/pi/DFRobotUploads/whatsapp_client_img.jpg'
                     shutil.copy(globImgOut, imgOut)
                 msgOut = globMsgOut
                 globMsgOutAvailable = False
@@ -270,6 +272,8 @@ def whatsAppClient():
 
         except Exception,e:
             logging.getLogger("MyLog").info('whatsAppClient exception: ' + str(e))
+            # Signal to restart this whatsAppClient thread.
+            globRestartWhatsApp = True
     try:
         stack.broadcastEvent(YowLayerEvent(SendReceiveLayer.EVENT_DISCONNECT))
     except Exception,e:
@@ -277,13 +281,14 @@ def whatsAppClient():
 
 
 def startWhatsAppClient():
-    global globContinueWhatsApp
+    global globContinueWhatsApp, globRestartWhatsApp
     global globMsgIn, globMsgInAvailable, globMsgInAvailableLock
     global globMsgOut, globMsgOutAvailable, globMsgOutAvailableLock
     logging.getLogger("MyLog").info('going to start whatsAppClient')
     globMsgInAvailableLock = thread.allocate_lock()
     globMsgOutAvailableLock = thread.allocate_lock()
     globContinueWhatsApp = True
+    globRestartWhatsApp = False
     globMsgInAvailable = globMsgOutAvailable = False
     thread.start_new_thread(whatsAppClient, ())
     # The delay below is to make sure we have connections.
@@ -298,6 +303,14 @@ def stopWhatsAppClient():
     # the 'while globContinueWhatsApp:' statement is reached in the whatsAppClient() thread.
     # Note that the whatsAppClient() thread contains a sleep of 1 sec.
     time.sleep(5.0)
+
+
+def checkWhatsAppClient():
+    global globRestartWhatsApp
+    if globRestartWhatsApp == True:
+        logging.getLogger("MyLog").info('going to restart whatsAppClient')
+        stopWhatsAppClient()
+        startWhatsAppClient()
 
 
 def sendWhatsAppMsg(msg):
@@ -316,8 +329,11 @@ def sendWhatsAppImg(img, caption):
     # Keep critical section as short as possible.
     globMsgOutAvailableLock.acquire()
     logging.getLogger("MyLog").info('going to send WhatsApp image ' + img + ' with caption "' + caption + '"')
-    # Copy img to motion_img.jpg here to be sure it is not accessed while WhatsApp is sending.
-    globImgOut = '/home/pi/DFRobotUploads/motion_img.jpg'
+    # Copy img to whatsapp_img.jpg so this thread can continue preparing the next img.
+    # The whatsAppClient thread will copy whatsapp_img.jpg to whatsapp_client_img.jpg using the same
+    # critical section lock. This way it is guaranteed that whatsapp_client_img.jpg will not be overwritten
+    # by this thread while it is sent by the whatsAppClient thread.
+    globImgOut = '/home/pi/DFRobotUploads/whatsapp_img.jpg'
     shutil.copy(img, globImgOut)
     globMsgOut = caption
     globMsgOutType = 'Image'

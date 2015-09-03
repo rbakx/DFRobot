@@ -15,8 +15,8 @@ from logging.handlers import RotatingFileHandler
 import whatsapp
 import own_util
 
-# General constants
-SendTextOrImageToWhatsApp = 'Image'  # Fill in 'Text' or 'Image'
+# General constants.
+SendTextOrImageToWhatsApp = 'Image'  # Fill in 'Text' or 'Image'.
 ImgWidth = 800
 ImgHeight = 600
 Fps = 2
@@ -25,26 +25,27 @@ DirectionRight = 25.0
 DirectionBack = 115.0
 DirectionLeft = 203.0
 # Constants which depend on the image format.
-ImgWidthFactor = ImgWidth / 640.0  # calibrated with 640 * 480 image
-ImgHeightFactor = ImgHeight / 480.0  # calibrated with 640 * 480 image
-ImgAreaFactor = (ImgWidth * ImgHeight) / (640.0 * 480.0)  # calibrated with 640 * 480 image
+ImgWidthFactor = ImgWidth / 640.0  # Calibrated with 640 * 480 image.
+ImgHeightFactor = ImgHeight / 480.0  # Calibrated with 640 * 480 image.
+ImgAreaFactor = (ImgWidth * ImgHeight) / (640.0 * 480.0)  # Calibrated with 640 * 480 image.
 # Blob detection constants
-SizeCorrect = 20.0 * ImgWidthFactor  # calibrated with 640 * 480 image
-SizeSlow = 20.0 * ImgWidthFactor  # calibrated with 640 * 480 image
-SizeStop = 40.0 * ImgWidthFactor  # calibrated with 640 * 480 image
-# Motion detection constants
-MotionDetectionBufferLength = Fps * 30 # number of images in motion detection buffer
-MotionDetectionBufferOffset = Fps * 3  # number of images that are kept before the motion is detected
-GrayLevelDifferenceTreshold = 20
-MinContourArea = 100 * ImgAreaFactor
-# Upload constants
+SizeCorrect = 20.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
+SizeSlow = 20.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
+SizeStop = 40.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
+# Motion detection constants.
+MotionDetectionBufferLength = Fps * 30  # Number of images in motion detection buffer.
+MotionDetectionBufferOffset = Fps * 3   # Number of images that are kept before the motion is detected.
+GrayLevelDifferenceTreshold = 20        # The larger this number the larger the graylevel difference must be to be considered as true motion.
+MinContourArea = 100 * ImgAreaFactor    # The larger this number the larger the motion contours must be to be considerd as true motion.
+MaxNofContours = 200                    # Maximum number of contours otherwise it will not be considered as true motion.
+# Upload constants.
 NofMotionVideosToKeep = 10
 NofHomeRunVideosToKeep = 3
 
-# Global variables
+# Global variables.
 globMyLog = None
 
-# Initialization
+# Initialization.
 doFullRun = False
 doHomeRun = False
 doPrint = False
@@ -326,6 +327,7 @@ def motionDetection():
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
     globMyLog.info(stdOutAndErr)
 
+    logCount = 0
     while globContinue == True:
         nofConnections = own_util.getNofConnections()
         
@@ -344,6 +346,8 @@ def motionDetection():
             img = globImg
             globNewImageAvailableLock.release()
             
+            # Check if whatsAppClient thread is still running and restart if needed.
+            whatsapp.checkWhatsAppClient()
             if whatsapp.globSendPicture == True:
                 # Save img to latest_img.jpg and send it with WhatsApp.
                 cv2.imwrite('/home/pi/DFRobotUploads/latest_img.jpg', img)
@@ -353,6 +357,11 @@ def motionDetection():
         
             # If globDoMotionDetection == False, then only capture images for sending pictures if required.
             if whatsapp.globDoMotionDetection == False:
+                if logCount == 0:
+                    if doPrint:
+                        print 'globDoMotionDetection set to False'
+                    globMyLog.info('globDoMotionDetection set to False')
+                    logCount = 1
                 # Reset values for the next time motion detection is switched on.
                 img = img_gray = img_gray_prev = None
                 imgCount = 0
@@ -360,6 +369,11 @@ def motionDetection():
                 noOfConsecutiveMotions = 0
                 firstImageIndex = 0
                 continue;
+            elif logCount == 1:
+                if doPrint:
+                    print 'globDoMotionDetection set to True'
+                globMyLog.info('globDoMotionDetection set to True')
+                logCount = 0
 
             if img_gray != None:
                 img_gray_prev = img_gray.copy()
@@ -375,8 +389,8 @@ def motionDetection():
                     print 'number of contours:', len(cnts)
 
                 # Loop over the contours.
-                # If number of contours is too high, it is not normal motion.
-                if len(cnts) < 200:
+                # If number of contours is too high it is not considered true motion.
+                if len(cnts) < MaxNofContours:
                     # xLeft, xRight, yTop, yBottom will be the coordinates of the outer bounding box of all contours.
                     xLeft = ImgWidth
                     xRight = 0
@@ -535,6 +549,7 @@ for opt, arg in opts:
         doTestMotion = True
         doFullRun = True
         doPrint = True
+        whatsapp.globDoMotionDetection = True
     elif opt == '--show':
         doShow = True
     elif opt == '--nomove':
