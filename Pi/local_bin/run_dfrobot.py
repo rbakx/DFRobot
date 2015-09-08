@@ -169,7 +169,7 @@ def homeRun():
                     # For now we consider the blobs valid if the left and right one have appr. equal size.
                     distBlobLeftBlobRight = blobRight.pt[0] - blobLeft.pt[0]
                     avgSizeBlobLeftBlobRight = (blobLeft.size + blobRight.size) / 2.0
-                    if (blobLeft.size - blobRight.size) / avgSizeBlobLeftBlobRight < 0.3 and (distBlobLeftBlobRight - avgSizeBlobLeftBlobRight * 7.33) / ((distBlobLeftBlobRight + avgSizeBlobLeftBlobRight * 7.33) / 2.0) < 0.3:
+                    if abs((blobLeft.size - blobRight.size) / avgSizeBlobLeftBlobRight) < 0.3 and abs((distBlobLeftBlobRight - avgSizeBlobLeftBlobRight * 7.33) / ((distBlobLeftBlobRight + avgSizeBlobLeftBlobRight * 7.33) / 2.0)) < 0.3:
                         validBlobsFound = True
                     else:
                         if doPrint:
@@ -346,6 +346,8 @@ def motionDetection():
             img = globImg
             globNewImageAvailableLock.release()
             
+            # Update charging status of batteries.
+            own_util.checkCharging()
             # Check if whatsAppClient thread is still running and restart if needed.
             whatsapp.checkWhatsAppClient()
             if whatsapp.globSendPicture == True:

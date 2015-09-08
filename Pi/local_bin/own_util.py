@@ -7,16 +7,22 @@ import thread
 import re
 import inspect
 import logging
+import numpy as np
+
+
 
 def runShellCommandWait(cmd):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
 
+
 def runShellCommandNowait(cmd):
     subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+
 
 def getNofConnections():
     stdOutAndErr = runShellCommandWait('netstat | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
     return int(stdOutAndErr)
+
 
 # Below a psutil equivalent of netstat.
 # At the moment we do not use this because the output is difficult to parse and probably less stable than netstat.
@@ -27,6 +33,7 @@ def getNofConnectionsPsUtil():
     rexp = re.compile('(44444|44445)\)[^\)]*\)[^\)]*ESTABLISHED\'')
     match = rexp.findall(txt)
     return len(match)
+
 
 def move(direction, speed, delay, doMove):
     if doMove:
@@ -44,6 +51,7 @@ def move(direction, speed, delay, doMove):
     # Still delay when doMove == False to have similar timing.
     time.sleep(delay)
 
+
 def moveCamRel(degrees):
     if degrees >= -90 and degrees <= 90:
         if degrees > 0:
@@ -53,11 +61,13 @@ def moveCamRel(degrees):
         # Delay for i2c communication.
         time.sleep(0.1)
 
+
 def moveCamAbs(degrees):
     if degrees >= 0 and degrees <= 90:
         stdOutAndErr = runShellCommandWait('/usr/local/bin/i2c_cmd 12 ' + str(128 + degrees))
         # Delay for i2c communication.
         time.sleep(0.1)
+
 
 def getBatteryLevel():
     stdOutAndErr = runShellCommandWait('/usr/local/bin/i2c_cmd 0')
@@ -71,6 +81,37 @@ def getBatteryLevel():
     else:
         return 'unknown'
 
+
+# Global variables for getBatteryLevel(), used as static variables.
+# globBatteryLevels is a circular buffer of 30 battery values, initialized on battery level 200.
+globBatteryLevels = np.ones(30) * 200
+globBatteryLevelsIndex = 0  # index in the circular buffer.
+# The function below determines whether the batteries are being charged or not.
+# When the batteries are charged, the battery voltage is irregular.
+# To measure this we store the battery voltage in a numpy array and determine the standard deviation.
+# Assumption is that this function is called about once in a second or less often.
+def checkCharging():
+    global globBatteryLevels, globBatteryLevelsIndex
+    charging = False
+    strLevel = getBatteryLevel()
+    if strLevel != 'unknown':
+        level = int(strLevel)
+        globBatteryLevels[globBatteryLevelsIndex] = level
+        globBatteryLevelsIndex = globBatteryLevelsIndex + 1
+        if globBatteryLevelsIndex >= 30:
+            globBatteryLevelsIndex = 0
+        # If standard deviation of numpy array with battery levels > 2.0 then the batteries are being charged.
+        if np.std(globBatteryLevels) > 2.0:
+            charging = True
+    return charging
+
+
+def testCheckCharging():
+    while True:
+        print checkCharging()
+        time.sleep(1.0)
+
+
 def getUptime():
     stdOutAndErr = runShellCommandWait('/usr/bin/uptime')
     # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
@@ -80,6 +121,7 @@ def getUptime():
         return m.group(1)
     else:
         return 'unknown'
+
 
 def uploadAndPurge(filepath, nrOfFilesToKeep):
     # Going to upload the file to Google Drive using the 'drive' utility.

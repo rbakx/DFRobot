@@ -262,7 +262,11 @@ def whatsAppClient():
             elif re.search('how are you', msg, re.IGNORECASE):
                 sendWhatsAppMsg('I am fine, thx for asking!')
             elif re.search('battery', msg, re.IGNORECASE):
-                sendWhatsAppMsg('my battery level is ' + own_util.getBatteryLevel())
+                charging = own_util.checkCharging()
+                if charging == True:
+                    sendWhatsAppMsg('I am charging, my battery level is ' + own_util.getBatteryLevel())
+                else:
+                    sendWhatsAppMsg('I am not charging, my battery level is ' + own_util.getBatteryLevel())
             elif re.search('awake', msg, re.IGNORECASE):
                 sendWhatsAppMsg('I am awake for ' + own_util.getUptime())
             elif re.search('joke', msg, re.IGNORECASE):
