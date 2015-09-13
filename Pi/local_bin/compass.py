@@ -90,7 +90,7 @@ def calibrateCompass():
     y_out_raw_min = float("infinity")
     y_out_raw_max = float("-infinity")
     # Turn around a few times to make sure all angles are measured.
-    for i in range(600):
+    for i in range(300):
         (x_out_raw, y_out_raw, z_out_raw, x_out, y_out, degrees) = readCompass(True)
         own_util.move('right', 128, 0.2, True)
         if x_out_raw_min > x_out_raw:
