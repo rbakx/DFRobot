@@ -10,6 +10,27 @@ import logging
 import numpy as np
 
 
+# Global variables
+globI2cLock = None
+
+
+def createI2cLock():
+    global globI2cLock
+    # Create lock for i2c communication; only one thread may take the i2c bus.
+    if globI2cLock == None:
+        globI2cLock = thread.allocate_lock()
+
+
+def runI2cCommandWait(cmd):
+    global globI2cLock
+    createI2cLock() # Create i2c lock if it does not exist yet.
+    # Lock  i2c communication for this thread.
+    globI2cLock.acquire()
+    stdOutAndErr = subprocess.Popen('/usr/local/bin/i2c_cmd ' + cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
+    # Release i2c communication for this thread.
+    globI2cLock.release()
+    return stdOutAndErr
+
 
 def runShellCommandWait(cmd):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
@@ -47,7 +68,7 @@ def move(direction, speed, delay, doMove):
             dir = 4
         else:
             dir = 0
-        stdOutAndErr = runShellCommandWait('/usr/local/bin/i2c_cmd ' + str(dir) + ' ' + str(speed))
+        stdOutAndErr = runI2cCommandWait(str(dir) + ' ' + str(speed))
     # Still delay when doMove == False to have similar timing.
     time.sleep(delay)
 
@@ -55,24 +76,18 @@ def move(direction, speed, delay, doMove):
 def moveCamRel(degrees):
     if degrees >= -90 and degrees <= 90:
         if degrees > 0:
-            stdOutAndErr = runShellCommandWait('/usr/local/bin/i2c_cmd 10 ' + str(128 + degrees))
+            stdOutAndErr = runI2cCommandWait('10 ' + str(128 + degrees))
         elif degrees < 0:
-            stdOutAndErr = runShellCommandWait('/usr/local/bin/i2c_cmd 11 ' + str(128 - degrees))
-        # Delay for i2c communication.
-        time.sleep(0.1)
+            stdOutAndErr = runI2cCommandWait('11 ' + str(128 - degrees))
 
 
 def moveCamAbs(degrees):
     if degrees >= 0 and degrees <= 90:
-        stdOutAndErr = runShellCommandWait('/usr/local/bin/i2c_cmd 12 ' + str(128 + degrees))
-        # Delay for i2c communication.
-        time.sleep(0.1)
+        stdOutAndErr = runI2cCommandWait('12 ' + str(128 + degrees))
 
 
 def getBatteryLevel():
-    stdOutAndErr = runShellCommandWait('/usr/local/bin/i2c_cmd 0')
-    # Delay for i2c communication.
-    time.sleep(0.1)
+    stdOutAndErr = runI2cCommandWait('0')
     # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
     expr = re.compile('.*Received ([0-9]+).*', re.DOTALL)
     m = expr.match(stdOutAndErr)

@@ -6,7 +6,7 @@ import thread
 import cv2
 import numpy as np
 import urllib
-import getopt
+import argparse
 import time
 import compass
 import logging
@@ -346,8 +346,6 @@ def motionDetection():
             img = globImg
             globNewImageAvailableLock.release()
             
-            # Update charging status of batteries.
-            own_util.checkCharging()
             # Check if whatsAppClient thread is still running and restart if needed.
             whatsapp.checkWhatsAppClient()
             if whatsapp.globSendPicture == True:
@@ -532,37 +530,38 @@ def createMyLog(path):
 #   The robot finds and drives back to the garage where it makes connection with the charging station.
 
 # Handle arguments.
-try:
-    # The [1:] in sys.argv[1:] is to skip argv[0] which is the script name.
-    opts, args = getopt.getopt(sys.argv[1:],"",["log=","fullrun","homerun","print","testmotion","show","nomove"])
-except getopt.GetoptError:
-    print 'run_dfrobot.py --log <logfilepath> [--fullrun] [--homerun] [--print] [--testmotion] [--show] [--nomove]'
-    sys.exit(2)
-for opt, arg in opts:
-    if opt == '--log':
-        logFilePath = arg
-    elif opt == '--fullrun':
-        doFullRun = True
-    elif opt == '--homerun':
-        doHomeRun = True
-    elif opt == '--print':
-        doPrint = True
-    elif opt == '--testmotion':
-        doTestMotion = True
-        doFullRun = True
-        doPrint = True
-        whatsapp.globDoMotionDetection = True
-    elif opt == '--show':
-        doShow = True
-    elif opt == '--nomove':
-        doMove = False
+parser = argparse.ArgumentParser()
+parser.add_argument('--log', default='/home/pi/log/dfrobot_fullrunlog.txt')
+parser.add_argument('--fullrun', action='store_true')
+parser.add_argument('--homerun', action='store_true')
+parser.add_argument('--doprint', action='store_true')
+parser.add_argument('--testmotion', action='store_true')
+parser.add_argument('--show', action='store_true')
+parser.add_argument('--nomove', action='store_true')
+args = parser.parse_args()
+
+logFilePath = args.log
+if args.fullrun:
+    doFullRun = True
+if args.homerun:
+    doHomeRun = True
+if args.doprint:
+    doPrint = True
+if args.testmotion:
+    doTestMotion = True
+    doFullRun = True
+    doPrint = True
+    whatsapp.globDoMotionDetection = True
+if args.show:
+    doShow = True
+if args.nomove:
+    doMove = False
 
 # Create logger.
 createMyLog(logFilePath)
 globMyLog.info('START LOG  *****')
 
-
-# Catch exceptions to able to log them.
+# Catch exceptions and log them.
 try:
     if doFullRun:
         # Full run

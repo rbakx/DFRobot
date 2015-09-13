@@ -235,7 +235,9 @@ def whatsAppClient():
             stack.loop(timeout = 1.0, count=1)
             # Sleep to save cpu.
             time.sleep(1.0)
-    
+            # Update charging status of batteries.
+            own_util.checkCharging()
+
             # Handle messages.
             msg = receiveWhatsAppMsg()
             if re.search('.*motion.*on.*', msg, re.IGNORECASE):
