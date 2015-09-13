@@ -49,21 +49,39 @@ def readCompass(debug = False):
     y_out_raw = read_word_2c(7)
     z_out_raw = read_word_2c(5)
 
+
+    # Calibration procedure:
+    # Run calibrateCompass() and below fill in the resulting values.
+    # Run testCompass() and position the robot such that raw degrees equals 0.
+    # Then physically rotate the robot 180 degrees and fill in measured degrees in measuredDegreesAt180Degrees below.
+    # This calibration will result in x_out and y_out varying between -200 and +200.
+    # Because the HMC5883L is not exactly linear or mounted exactly horizontal,
+    # we apply an extra correction (offsetCorrectionAt180Degrees) at 180 degrees to straigten the curve.
+    x_factor = 0.98
+    x_offset = -28.99
+    y_factor = 0.94
+    y_offset = 16.39
+    measuredDegreesAt180Degrees = 195.0
+    
+    offsetCorrectionAt180Degrees = 180.0 - measuredDegreesAt180Degrees
+    
     # When supplying a 'True' as parameter to this function the raw X Y Z data and the corrected data will be printed.
     # From measurements of these raw values it shows that we have to compensate quite a bit with a gain and offset.
     # This is because the HMC5883L is mounted on the robot and is very sensitive to surrounding metal and fields.
-    # Actual measurements:
-    # x_out range: [-174 .. 233]
-    # y_out range: [-255 .. 173]
     # We apply a scale and ofset to both x_out and y_out so the range will be [-200 .. 200]
-    x_out = x_out_raw * 0.98 - 28.99
-    y_out = y_out_raw * 0.93 + 38.32
+    x_out = x_out_raw * x_factor + x_offset
+    y_out = y_out_raw * y_factor + y_offset
 
     bearing  = math.atan2(y_out, x_out)
     if (bearing < 0):
         bearing += 2 * math.pi
-    degrees = math.degrees(bearing)
-    
+    degrees_raw = math.degrees(bearing)
+    # Correct for offset at 180 degrees.
+    if degrees_raw < 180:
+        degrees = degrees_raw + (degrees_raw / 180.0) * offsetCorrectionAt180Degrees
+    else:
+        degrees = degrees_raw + (360.0 - degrees_raw) / 180.0 * offsetCorrectionAt180Degrees
+
     # Delay for i2c communication.
     time.sleep(0.01)
 
@@ -71,15 +89,15 @@ def readCompass(debug = False):
     own_util.globI2cLock.release()
 
     if debug:
-        return x_out_raw, y_out_raw, z_out_raw, x_out, y_out, degrees
+        return x_out_raw, y_out_raw, z_out_raw, x_out, y_out, degrees_raw, degrees
     else:
         return degrees
 
 # The below function is to test the compass.
 def testCompass():
     while True:
-        (x_out_raw, y_out_raw, z_out_raw, x_out, y_out, degrees) = readCompass(True)
-        print 'raw X Y Z:', x_out_raw, y_out_raw, z_out_raw
+        (x_out_raw, y_out_raw, z_out_raw, x_out, y_out, raw_degrees, degrees) = readCompass(True)
+        print 'raw X Y Z and raw degrees:', x_out_raw, y_out_raw, z_out_raw, round(raw_degrees,2)
         print 'corrected X Y and degrees:', int(x_out), int(y_out), round(degrees,2)
         time.sleep(0.5)
 
@@ -91,7 +109,7 @@ def calibrateCompass():
     y_out_raw_max = float("-infinity")
     # Turn around a few times to make sure all angles are measured.
     for i in range(300):
-        (x_out_raw, y_out_raw, z_out_raw, x_out, y_out, degrees) = readCompass(True)
+        (x_out_raw, y_out_raw, z_out_raw, x_out, y_out, raw_degrees, degrees) = readCompass(True)
         own_util.move('right', 128, 0.2, True)
         if x_out_raw_min > x_out_raw:
             x_out_raw_min = x_out_raw
@@ -108,10 +126,10 @@ def calibrateCompass():
     y_offset = 200.0 - y_out_raw_max * y_factor
     print 'x_out_raw_min x_out_raw_max =', round(x_out_raw_min,2), round(x_out_raw_max,2)
     print 'y_out_raw_min y_out_raw_max =', round(y_out_raw_min,2), round(y_out_raw_max,2)
-    print 'x-factor =', round(x_factor,2)
-    print 'x-offset =', round(x_offset,2)
-    print 'y-factor =', round(y_factor,2)
-    print 'y-offset =', round(y_offset,2)
+    print 'x_factor =', round(x_factor,2)
+    print 'x_offset =', round(x_offset,2)
+    print 'y_factor =', round(y_factor,2)
+    print 'y_offset =', round(y_offset,2)
 
 def gotoDegreeAbs(targetDegree, doMove):
     currentDegree = readCompass()
