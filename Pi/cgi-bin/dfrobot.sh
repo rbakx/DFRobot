@@ -16,8 +16,8 @@ function handle_command {
     if [ "${1}" == "start-stream-hq" ]
     then
         echo "***** $(date), $prompt: 'start-stream-hq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Stop previous stream first if any.
-        killall mjpg_streamer > /dev/null 2>&1
+        # Stop previous stream first if any. Use sudo because stream can also be started by other user.
+        sudo killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
         # Start capturing video stream. Execute in background to prevent blocking webpage refresh.
         LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 10 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1 &
@@ -26,8 +26,8 @@ function handle_command {
     elif [ "${1}" == "start-stream-lq" ]
     then
         echo "***** $(date), $prompt: 'start-stream-lq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Stop previous stream first if any.
-        killall mjpg_streamer > /dev/null 2>&1
+        # Stop previous stream first if any. Use sudo because stream can also be started by other user.
+        sudo killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
         # Start low quality video stream. Execute in background to prevent blocking webpage refresh.
         LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1 &
@@ -36,7 +36,8 @@ function handle_command {
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        killall mjpg_streamer > /dev/null 2>&1
+        # Use sudo because stream can also be started by other user.
+        sudo killall mjpg_streamer > /dev/null 2>&1
         # Force complete page refresh to correctly show the stopped MJPEG stream.
         do_refresh_page=true
     elif [ "${1}" == "capture-start" ]
@@ -106,18 +107,13 @@ function handle_command {
     elif [ "${1}" == "home-start" ]
     then
         echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
-        # Execute in background to prevent blocking webpage refresh.
-        /usr/local/bin/run_dfrobot.py --log="/home/pi/log/dfrobot_homerunlog.txt" --homerun > /dev/null 2>&1 &
+        echo -n "home_start" > /dev/null 2>&1 > /dev/tcp/localhost/12345
         # Force complete page refresh to correctly show the new MJPEG stream.
         do_refresh_page=true
     elif [ "${1}" == "home-stop" ]
     then
         echo "***** $(date), $prompt: 'home-stop' command received" >> /home/pi/log/dfrobot_log.txt
-        # The name of the process to be killed is 'python' which is too general.
-        # Therefore use pkill -f to kill only the python process running the run_dfrobot.py script.
-        # With the -f option a pattern is matched against the full command line.
-        # Note that we only kill the python process started by this user (www-data).
-        pkill -f run_dfrobot.py > /dev/null 2>&1
+        echo -n "home_stop" > /dev/null 2>&1 > /dev/tcp/localhost/12345
     elif [ "${1}" == "status" ]
     then
         echo "***** $(date), $prompt: 'status' command received" >> /home/pi/log/dfrobot_log.txt
@@ -170,7 +166,7 @@ then
     # Reason for a complete page refresh is to correctly show a new MJPEG stream.
     # The page refresh is done by returning html which calls javascript function parent.location.reload().
     # First delay to make sure new the MJPEG stream is started.
-    # This is especially needed in case the run_dfrobot.py -homerun python script is called
+    # This is especially needed in case the 'home-start' command is received
     # which will start a new MJPEG stream but takes a second to start.
     sleep 3
     echo -e "Content-type: text/html\n"

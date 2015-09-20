@@ -12,7 +12,7 @@ import compass
 import logging
 from logging import Formatter
 from logging.handlers import RotatingFileHandler
-import whatsapp
+import communication
 import own_util
 
 # General constants.
@@ -46,8 +46,6 @@ NofHomeRunVideosToKeep = 3
 globMyLog = None
 
 # Initialization.
-doFullRun = False
-doHomeRun = False
 doPrint = False
 doTestMotion = False
 doShow = False
@@ -56,9 +54,9 @@ logFilePath = ''
 
 
 def getNewImage():
-    global globContinue, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
+    global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
     
-    while globContinue == True:
+    while globContinueCapture == True:
         globBytes+=globStream.read(1024)
         a = globBytes.find('\xff\xd8')
         b = globBytes.find('\xff\xd9')
@@ -75,13 +73,13 @@ def getNewImage():
 
 
 def homeRun():
-    global globContinue, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
+    global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
     
     globStream=urllib.urlopen('http://@localhost:44445/?action=stream')
     globBytes=''
     globNewImageAvailable = False
     globNewImageAvailableLock = thread.allocate_lock()
-    globContinue = True
+    globContinueCapture = True
     thread.start_new_thread(getNewImage, ())
 
     correctApproachAngle = False
@@ -92,7 +90,7 @@ def homeRun():
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
     globMyLog.info(stdOutAndErr)
 
-    while globContinue == True:
+    while globContinueCapture == True and communication.globDoHomeRun == True:
         # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
@@ -259,7 +257,7 @@ def homeRun():
                         for i in range(0, 8):
                             own_util.move('backward', 140, 1.0, doMove)
                         globMyLog.info('Home found!')
-                        globContinue = False
+                        globContinueCapture = False
 
             elif len(sortedBlobs) > 0:
                 if doPrint:
@@ -296,7 +294,10 @@ def homeRun():
             globNewImageAvailableLock.release()
         else:
             globNewImageAvailableLock.release()
-                
+
+    # Stop the getNewImage thread and indicate HomeRun is finished.
+    globContinueCapture = False
+    communication.globDoHomeRun = False
     # Close the stream to have a correct administration of the number of connections.
     globStream.close()
     # Convert the homerun images to a video and remove the images.
@@ -307,14 +308,14 @@ def homeRun():
     globMyLog.info(stdOutAndErr)
 
 
-def motionDetection():
-    global globContinue, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
+def captureAndMotionDetection():
+    global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
     
     globStream=urllib.urlopen('http://@localhost:44445/?action=stream')
     globBytes=''
     globNewImageAvailable = False
     globNewImageAvailableLock = thread.allocate_lock()
-    globContinue = True
+    globContinueCapture = True
     thread.start_new_thread(getNewImage, ())
     
     img = img_gray = img_gray_prev = None
@@ -328,15 +329,15 @@ def motionDetection():
     globMyLog.info(stdOutAndErr)
 
     logCount = 0
-    while globContinue == True:
+    while globContinueCapture == True and communication.globDoFullRun == True:
         nofConnections = own_util.getNofConnections()
         
         if nofConnections > 2:
             if doPrint:
-                print 'stopping motion detection because there are extra connections:', str(nofConnections)
-            globMyLog.info('stopping motion detection because there are extra connections: ' + str(nofConnections))
+                print 'stopping capture and motion detection because there are extra connections:', str(nofConnections)
+            globMyLog.info('stopping capture and motion detection because there are extra connections: ' + str(nofConnections))
             globStream.close()
-            globContinue = False
+            globContinueCapture = False
             return False
     
         # Keep critical section as short as possible.
@@ -347,16 +348,16 @@ def motionDetection():
             globNewImageAvailableLock.release()
             
             # Check if whatsAppClient thread is still running and restart if needed.
-            whatsapp.checkWhatsAppClient()
-            if whatsapp.globSendPicture == True:
+            communication.checkWhatsAppClient()
+            if communication.globWhatsAppSendPicture == True:
                 # Save img to latest_img.jpg and send it with WhatsApp.
                 cv2.imwrite('/home/pi/DFRobotUploads/latest_img.jpg', img)
-                whatsapp.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'here is your picture')
+                communication.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'here is your picture')
                 # Not needed to lock here as it is ok to miss a 'send picture' command when they come in too fast.
-                whatsapp.globSendPicture = False
+                communication.globWhatsAppSendPicture = False
         
             # If globDoMotionDetection == False, then only capture images for sending pictures if required.
-            if whatsapp.globDoMotionDetection == False:
+            if communication.globDoMotionDetection == False:
                 if logCount == 0:
                     if doPrint:
                         print 'globDoMotionDetection set to False'
@@ -444,9 +445,9 @@ def motionDetection():
                         print 'motion detected, going to send message to WhatsApp'
                     globMyLog.info('motion detected, going to send message to WhatsApp')
                     if SendTextOrImageToWhatsApp == 'Text':
-                        whatsapp.sendWhatsAppMsg('Motion detected!')
+                        communication.sendWhatsAppMsg('Motion detected!')
                     else:
-                        whatsapp.sendWhatsAppImg(firstImageName, 'Motion detected!')
+                        communication.sendWhatsAppImg(firstImageName, 'Motion detected!')
 
                     firstImageIndex = imgCount
                     extraImgCount = 0
@@ -458,7 +459,7 @@ def motionDetection():
 
                     if extraImgCount == MotionDetectionBufferLength - MotionDetectionBufferOffset - 1:
                         # All required images for this motion are captured, stop the capturing.
-                        globContinue = False
+                        globContinueCapture = False
 
             if doShow:
                 # Show motion
@@ -542,16 +543,16 @@ args = parser.parse_args()
 
 logFilePath = args.log
 if args.fullrun:
-    doFullRun = True
+    communication.globDoFullRun = True
 if args.homerun:
-    doHomeRun = True
+    communication.globDoHomeRun = True
 if args.doprint:
     doPrint = True
 if args.testmotion:
     doTestMotion = True
-    doFullRun = True
     doPrint = True
-    whatsapp.globDoMotionDetection = True
+    communication.globDoFullRun = True
+    communication.globDoMotionDetection = True
 if args.show:
     doShow = True
 if args.nomove:
@@ -561,42 +562,49 @@ if args.nomove:
 createMyLog(logFilePath)
 globMyLog.info('START LOG  *****')
 
-# Catch exceptions and log them.
-try:
-    if doFullRun:
-        # Full run
-        # In FullRun start WhatsApp client as FullRun is the process which runs continuously.
-        whatsapp.startWhatsAppClient()
-        whatsapp.sendWhatsAppMsg('I am up and running!')
+# Start WhatsApp client.
+communication.startWhatsAppClient()
+communication.sendWhatsAppMsg('I am up and running!')
 
+# Start Socket client.
+communication.startSocketClient()
+
+# Catch exceptions and log them.
+while True:
+    try:
         streamStarted = False
         logCount = 0
-        while True:
+        if communication.globDoFullRun:
+            globMyLog.info('going to start FullRun')
+            if doPrint:
+                print 'Going to start FullRun'
+        while communication.globDoFullRun:
+            # Full run
             # First check if there are active connections. If so, do not continue.
             nofConnections = own_util.getNofConnections()
             if nofConnections > 0:
                 if logCount == 0:
                     if doPrint:
-                        print 'not going to run motion detection because there are active connections:', str(nofConnections)
-                    globMyLog.info('not going to run motion detection because there are active connections: ' + str(nofConnections))
+                        print 'not going to do full run because there are active connections:', str(nofConnections)
+                    globMyLog.info('not going to do full run because there are active connections: ' + str(nofConnections))
                     logCount = 1
             else:
                 logCount = 0
                 
                 if streamStarted == False:
                     # Start MJPEG stream. Stop previous stream first if any.
-                    stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start stream')
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     streamStarted = True
                         
-                globMyLog.info('going to call motionDetection()')
-                # Call motionDetection(). This function returns with True when motion is detected
+                globMyLog.info('going to call captureAndMotionDetection()')
+                # Call captureAndMotionDetection(). This function returns with True when motion is detected
                 # and dfrobot_pivid_motion.avi is created. It returns false when no motion is detected but other
                 # connectios are becoming active.
-                motionDetected = motionDetection()
+                motionDetected = captureAndMotionDetection()
 
                 if motionDetected:
                     if doPrint:
@@ -609,24 +617,31 @@ try:
                     # There are extra connections so stop MJPEG stream.
                     # Stop MJPEG stream.
                     globMyLog.info('extra connections, going to stop stream')
-                    stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     streamStarted = False
 
-    elif doHomeRun:
-        # Home run
-        # Start MJPEG stream. Stop previous stream first if any.
-        stdOutAndErr = own_util.runShellCommandWait('killall mjpg_streamer')
-        globMyLog.info('going to start stream')
-        time.sleep(0.5)
-        own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
-        # Delay to give stream time to start up and camera to stabilize.
-        time.sleep(5)
-        homeRun()
-        # Upload and purge the video file and log file.
-        own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
-        own_util.uploadAndPurge(logFilePath, 1)
-except Exception,e:
-    globMyLog.info('run_dfrobot exception: ' + str(e))
-    raise
+        if communication.globDoHomeRun:
+            # Home run
+            globMyLog.info('going to start HomeRun')
+            if doPrint:
+                print 'Going to start HomeRun'
+            # Start MJPEG stream. Stop previous stream first if any.
+            stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+            globMyLog.info('going to start stream')
+            time.sleep(0.5)
+            own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+            # Delay to give stream time to start up and camera to stabilize.
+            time.sleep(5)
+            homeRun()
+            # Upload and purge the video file and log file.
+            own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
+            own_util.uploadAndPurge(logFilePath, 1)
+            
+            # HomeRun is finished, switch back to full run.
+            communication.globDoHomeRun = False
+            communication.globDoFullRun = True
+    except Exception,e:
+        globMyLog.info('run_dfrobot exception: ' + str(e))
+        raise
 
 
