@@ -16,7 +16,7 @@ function handle_command {
     if [ "${1}" == "start-stream-hq" ]
     then
         echo "***** $(date), $prompt: 'start-stream-hq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Stop previous stream first if any. Use sudo because stream can also be started by other user.
+        # Stop previous stream first if any. Use sudo because stream can be started by another user.
         sudo killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
         # Start capturing video stream. Execute in background to prevent blocking webpage refresh.
@@ -26,7 +26,7 @@ function handle_command {
     elif [ "${1}" == "start-stream-lq" ]
     then
         echo "***** $(date), $prompt: 'start-stream-lq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Stop previous stream first if any. Use sudo because stream can also be started by other user.
+        # Stop previous stream first if any. Use sudo because stream can be started by another user.
         sudo killall mjpg_streamer > /dev/null 2>&1
         sleep 0.5
         # Start low quality video stream. Execute in background to prevent blocking webpage refresh.
@@ -36,7 +36,7 @@ function handle_command {
     elif [ "${1}" == "stop-stream" ]
     then
         echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        # Use sudo because stream can also be started by other user.
+        # Use sudo because stream can be started by another user.
         sudo killall mjpg_streamer > /dev/null 2>&1
         # Force complete page refresh to correctly show the stopped MJPEG stream.
         do_refresh_page=true

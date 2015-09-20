@@ -592,7 +592,7 @@ while True:
                 logCount = 0
                 
                 if streamStarted == False:
-                    # Start MJPEG stream. Stop previous stream first if any.
+                    # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start stream')
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
@@ -615,7 +615,7 @@ while True:
                     own_util.uploadAndPurge(logFilePath, 1)
                 else:
                     # There are extra connections so stop MJPEG stream.
-                    # Stop MJPEG stream.
+                    # Stop MJPEG stream. Use sudo because stream can be started by another user.
                     globMyLog.info('extra connections, going to stop stream')
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     streamStarted = False
@@ -625,7 +625,7 @@ while True:
             globMyLog.info('going to start HomeRun')
             if doPrint:
                 print 'Going to start HomeRun'
-            # Start MJPEG stream. Stop previous stream first if any.
+            # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
             stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
             globMyLog.info('going to start stream')
             time.sleep(0.5)
