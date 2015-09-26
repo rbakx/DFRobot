@@ -139,6 +139,12 @@ def getUptime():
 
 
 def uploadAndPurge(filepath, nrOfFilesToKeep):
+    # Check if filename starts with 'dfrobot_' and number of files to keep >= 1 else do not purge anything and exit.
+    filename = os.path.basename(filepath)
+    if filename[:8] != 'dfrobot_' or nrOfFilesToKeep < 1:
+        logging.getLogger("MyLog").info('uploadAndPurge: illegal filepath:nrOfFilesToKeep to upload and purge: ' + filepath + ':' + str(nrOfFilesToKeep))
+        return
+    
     # Going to upload the file to Google Drive using the 'drive' utility.
     # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
     # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
@@ -148,10 +154,26 @@ def uploadAndPurge(filepath, nrOfFilesToKeep):
     # Run 'drive' as www-data to prevent Google Drive authentication problems.
     stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f ' + filepath)
     logging.getLogger("MyLog").info(stdOutAndErr)
-    
-    # Purge uploads to Google Drive to prevent filling up.
-    logging.getLogger("MyLog").info('going to call \'purge_dfrobot_uploads.sh\'')
-    # purge_dfrobot_uploads.sh is a bash script which writes to the logfile itself, so do not redirect output.
-    # This means we cannot use runShellCommandWait() or runShellCommandNowait().
-    p = subprocess.Popen('/usr/local/bin/purge_dfrobot_uploads.sh ' + os.path.basename(filepath) + ' ' + str(nrOfFilesToKeep), shell=True)
-    p.wait()
+
+    # Purge filename on Google Drive to prevent filling up.
+    logging.getLogger("MyLog").info('going to purge ' + filename)
+    # Find all Id's of filename versions on drive.
+    stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive list -t ' + filename)
+    # Now stdOutAndErr is a multiline string containing on each line a file version.
+    # The last line is the oldest.
+    # The first line is the title line so does not contain a valid file version.
+
+    # Use a regular expression to get the file Id's of the oldest files to be purged in a list.
+    # Use MULTILINE (so '^' will match the start of a new line) because stdOutAndErr can be multiline.
+    expr = re.compile('(^.*?) ', re.MULTILINE)
+    idList = expr.findall(stdOutAndErr)
+    # Now idList is a list containing the Id's of all file versions.
+    # The last Id in the list is the oldest.
+    if idList != None:
+        logging.getLogger("MyLog").info('uploadAndPurge: ' + str(len(idList) - 1) + ' versions of ' + filename + ' found on Google Drive')
+        # Iterate backwards through the list, starting with the oldest file
+        # until there are nrOfFilesToKeep files left.
+        for i in range(len(idList)-1, nrOfFilesToKeep, -1):
+            # Delete this file version.
+            stdOutAndErr = runShellCommandWait('sudo -u www-data /usr/local/bin/drive delete -i ' + idList[i])
+            logging.getLogger("MyLog").info(stdOutAndErr)

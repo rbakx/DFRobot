@@ -57,20 +57,19 @@ function handle_command {
         # This because the stdout of this script is returned to the browser and is strictly defined.
         ( \
         killall vlc > /dev/null 2>&1 ;\
-        # Going to upload the file to Google Drive using the 'drive' utility.
+        # Going to upload and purge the video and logfile to Google Drive using the 'drive' utility.
         # Run 'drive' as www-data to prevent Google Drive authentication problems.
         # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
         # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
         # This id can be obtained using 'drive list -t DFRobotUploads'.
         # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
-        echo "***** $(date), $prompt: going to call 'drive' to upload videofile" >> /home/pi/log/dfrobot_log.txt ;\
-        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/DFRobotUploads/dfrobot_pivid_man.mp4 >> /home/pi/log/dfrobot_log.txt 2>&1 ;\
-        echo "***** $(date), $prompt: going to call 'drive' to upload logfile" >> /home/pi/log/dfrobot_log.txt ;\
-        sudo -u www-data drive upload -p 0B1WIoyfCgifmMUwwcXNqeDl6U1k -f /home/pi/log/dfrobot_log.txt >> /home/pi/log/dfrobot_log.txt 2>&1 ;\
-        # Going to purge previously uploaded files to prevent filling up Google Drive.
-        echo "***** $(date), $prompt: going to call 'purge_dfrobot_uploads.sh'" >> /home/pi/log/dfrobot_log.txt ;\
-        purge_dfrobot_uploads.sh dfrobot_pivid_man.mp4 3 ;\
-        purge_dfrobot_uploads.sh dfrobot_log.txt 1 ;\
+        # To upload and purge a file the python function uploadAndPurge() in own_util.py is used.
+        # To call this function from this script 'python -c' is used to first import own_util.
+        # To enable importing this module from anywhere we have to add the location to the python system path.
+        echo "***** $(date), $prompt: going to upload and purge videofile" >> /home/pi/log/dfrobot_log.txt ;\
+        python -c 'import sys; sys.path.append("/usr/local/bin"); import own_util; own_util.uploadAndPurge("/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4", 3)' > /dev/null 2>&1 ;\
+        echo "***** $(date), $prompt: going to upload and purge logfile" >> /home/pi/log/dfrobot_log.txt ;\
+        python -c 'import sys; sys.path.append("/usr/local/bin"); import own_util; own_util.uploadAndPurge("/home/pi/log/dfrobot_log.txt", 1)' > /dev/null 2>&1 ;\
     ) > /dev/null 2>&1 &
     elif [ "${1}" == "forward" ]
     then
