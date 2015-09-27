@@ -45,17 +45,6 @@ def getNofConnections():
     return int(stdOutAndErr)
 
 
-# Below a psutil equivalent of netstat.
-# At the moment we do not use this because the output is difficult to parse and probably less stable than netstat.
-# The number of connections reported with this function is not the same as with getNofConnections()
-# due to different parsing, mostly it is one less.
-def getNofConnectionsPsUtil():
-    txt = str(psutil.net_connections(kind='tcp'))
-    rexp = re.compile('(44444|44445)\)[^\)]*\)[^\)]*ESTABLISHED\'')
-    match = rexp.findall(txt)
-    return len(match)
-
-
 def move(direction, speed, delay, doMove):
     if doMove:
         if direction == 'forward':

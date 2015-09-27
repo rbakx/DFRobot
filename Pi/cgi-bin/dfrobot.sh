@@ -3,6 +3,28 @@
 # therefore it is important to capture all stdout output which must not be returned to the html.
 # This can be done using '> /dev/null 2>&1' or writing to a logfile.
 
+# Global variabele which will contain the message received from the socket.
+# A global variabele is used as bash functions cannot return values.
+globSocketMessageReceived=""
+# Function to send a socket message to the server and receive the reply.
+function socketSendAndReceive {
+    # Open socket and redirect to filedescriptor #3
+    exec 3<>/dev/tcp/localhost/12345
+    # Send message (first parameter) to socket.
+    echo -n ${1} > /dev/null 2>&1 >&3
+    # Read message back from socket into globSocketMessageReceived, with a timeout of 0.5 second.
+    # This timeout must be larger than the delay in the server loop.
+    read -r -t 0.5 globSocketMessageReceived <&3
+    if [ -z "$globSocketMessageReceived" ]
+    then
+    globSocketMessageReceived="no reply received!"
+    fi
+    # Close socket for read and write.
+    exec 3<&-
+    exec 3>&-
+}
+
+# This function will be called for every html form action.
 function handle_command {
     prompt=$(basename $0)
     # Reset the log file to zero length if the size gets too large.
@@ -12,6 +34,10 @@ function handle_command {
     else
         echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
     fi
+
+    # Send a "webaccess active" message to the socket server to indicate web access is active.
+    # The server can then take appropriate action, for example stop motion detection.
+    socketSendAndReceive "webaccess active"
 
     if [ "${1}" == "start-stream-hq" ]
     then
@@ -106,13 +132,13 @@ function handle_command {
     elif [ "${1}" == "home-start" ]
     then
         echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
-        echo -n "home_start" > /dev/null 2>&1 > /dev/tcp/localhost/12345
+        socketSendAndReceive "home_start"
         # Force complete page refresh to correctly show the new MJPEG stream.
         do_refresh_page=true
     elif [ "${1}" == "home-stop" ]
     then
         echo "***** $(date), $prompt: 'home-stop' command received" >> /home/pi/log/dfrobot_log.txt
-        echo -n "home_stop" > /dev/null 2>&1 > /dev/tcp/localhost/12345
+        socketSendAndReceive "home_stop"
     elif [ "${1}" == "status" ]
     then
         echo "***** $(date), $prompt: 'status' command received" >> /home/pi/log/dfrobot_log.txt
@@ -126,7 +152,8 @@ do_refresh_frame=false
 do_refresh_page=false
 
 # CGI POST method handling code below taken from http://tuxx-home.at/cmt.php?article=/2005/06/17/T09_07_39/index.html
-if [ "$REQUEST_METHOD" = "POST" ]; then
+if [ "$REQUEST_METHOD" = "POST" ]
+then
     read POST_STRING
 
     # replace all escaped percent signs with a single percent sign

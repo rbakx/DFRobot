@@ -30,6 +30,7 @@ from yowsup.stacks                                      import YowStack, YOWSUP_
 from yowsup                                             import env
 
 # Global variables
+globWebAccess = False
 globDoFullRun = False
 globDoHomeRun = False
 globDoMotionDetection = False
@@ -367,42 +368,94 @@ def receiveWhatsAppMsg():
 
 def socketClient():
     global globWSocketMsgIn, globSocketMsgInAvailable, globSocketMsgInAvailableLock
-    global globDoFullRun, globDoHomeRun
+    global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
+    global globWebAccess, globDoFullRun, globDoHomeRun
     s = socket.socket()         # Create a socket object.
     port = 12345                # Reserve a port for your service.
     s.bind(('localhost', port)) # Bind to localhost and port.
-
+    # Set socket timeout to prevent the s.accept() call from blocking.
+    # Instead it will generate a 'timed out' exception.
+    s.settimeout(1.0)
     s.listen(5)                 # Now wait for client connection.
+    webpageInactivityCount = 0
     while True:
         try:
-            c, addr = s.accept()    # Establish connection with client. Will block until client connects.
+            # Establish connection.
+            # We have set s.settimeout(...) which means s.accept() will generate a 'timed out' exception
+            # when there is no connection within the timeout time.
+            # This way we can still do some processing.
+            c = None
+            try:
+                c, addr = s.accept()    # Establish connection with client.
+            except Exception,e:
+                pass
+            
+            # Increase webpage inactivity count.
+            webpageInactivityCount = webpageInactivityCount + 1
+            if webpageInactivityCount > 60:
+                # Webpage is inactive, set globWebAccess to False so the server can take appropriate action,
+                # for example continue motion detection.
+                globWebAccess = False
+            
+            if c is None:
+                # No connection, continue with next iteration.
+                continue
+        
+            # Receive message.
             msg = c.recv(1024)      # Will receive any message with a maximum length of 1024 characters.
             # Keep critical section as short as possible.
             globSocketMsgInAvailableLock.acquire()
             globWSocketMsgIn = msg
             globSocketMsgInAvailable = True
             globSocketMsgInAvailableLock.release()
-        
-            # Handle messages. Because we do this in the same thread we could do without a separate receiveSocketMsg()
-            # with a locking mechanism.
-            # However, we leave it in in case we need to call receiveSocketMsg() from another thread.
+            
+            # A message is received. We immediately reply as the client does not have a separate receive thread.
+            # The client expects an immediate answer otherwise it will block.
+            # sendSocketMsg() which has a locking mechanism is used to prepare the message.
+            # Running in this thread this would not be needed but it might be in the future.
+            sendSocketMsg('message received: ' + msg)
+            
+            # Send message.
+            # Keep critical section as short as possible.
+            globSocketMsgOutAvailableLock.acquire()
+            if globSocketMsgOutAvailable == True:
+                msg = globSocketMsgOut
+                globSocketMsgOutAvailable = False
+                globSocketMsgOutAvailableLock.release()
+                # Add new line as other side will stop reading after a newline.
+                c.send(msg + '\n')
+            else:
+                globSocketMsgOutAvailableLock.release()
+            
+            # Handle messages.
+            # receiveSocketMsg() which has a locking mechanism is used to handle the message.
+            # Running in this thread this would not be needed but it might be in the future.
             msg = receiveSocketMsg()
-            if re.search('home_start', msg, re.IGNORECASE):
+            if re.search('webaccess active', msg, re.IGNORECASE):
+                # Webpage is active, set globWebAccess to True so the server can take appropriate action,
+                # for example stop motion detection.
+                globWebAccess = True
+                # Reset webpage inacivity count because there is activity.
+                webpageInactivityCount = 0
+            elif re.search('home_start', msg, re.IGNORECASE):
                 globDoFullRun = False
                 globDoHomeRun = True
             elif re.search('home_stop', msg, re.IGNORECASE):
                 globDoFullRun = True
                 globDoHomeRun = False
-
+        
         except Exception,e:
             logging.getLogger("MyLog").info('socketClient exception: ' + str(e))
 
 
 def startSocketClient():
     global globWSocketMsgIn, globSocketMsgInAvailable, globSocketMsgInAvailableLock
+    global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
     logging.getLogger("MyLog").info('going to start socketClient')
     globSocketMsgInAvailableLock = thread.allocate_lock()
+    globSocketMsgOutAvailableLock = thread.allocate_lock()
     globSocketMsgInAvailable = False
+    globSocketMsgOutAvailable = False
     thread.start_new_thread(socketClient, ())
 
 
@@ -421,5 +474,11 @@ def receiveSocketMsg():
     return msg
 
 
-
-
+def sendSocketMsg(msg):
+    global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
+    # Keep critical section as short as possible.
+    globSocketMsgOutAvailableLock.acquire()
+    globSocketMsgOut = msg
+    globSocketMsgOutAvailable = True
+    logging.getLogger("MyLog").info('Socket message sent: "' + msg + '"')
+    globSocketMsgOutAvailableLock.release()

@@ -330,12 +330,10 @@ def captureAndMotionDetection():
 
     logCount = 0
     while globContinueCapture == True and communication.globDoFullRun == True:
-        nofConnections = own_util.getNofConnections()
-        
-        if nofConnections > 2:
+        if communication.globWebAccess == True:
             if doPrint:
-                print 'stopping capture and motion detection because there are extra connections:', str(nofConnections)
-            globMyLog.info('stopping capture and motion detection because there are extra connections: ' + str(nofConnections))
+                print 'stopping capture and motion detection because the webpage is active'
+            globMyLog.info('stopping capture and motion detection because the webpage is active')
             globStream.close()
             globContinueCapture = False
             return False
@@ -573,23 +571,25 @@ communication.startSocketClient()
 while True:
     try:
         streamStarted = False
-        logCount = 0
-        if communication.globDoFullRun:
-            globMyLog.info('going to start FullRun')
-            if doPrint:
-                print 'Going to start FullRun'
+        logCount1 = 0
+        logCount2 = 0
         while communication.globDoFullRun:
             # Full run
-            # First check if there are active connections. If so, do not continue.
-            nofConnections = own_util.getNofConnections()
-            if nofConnections > 0:
-                if logCount == 0:
+            # First check if the webpage is active. If so, do not continue.
+            if communication.globWebAccess == True:
+                logCount2 = 0
+                if logCount1 == 0:
                     if doPrint:
-                        print 'not going to do full run because there are active connections:', str(nofConnections)
-                    globMyLog.info('not going to do full run because there are active connections: ' + str(nofConnections))
-                    logCount = 1
+                        print 'not going to do full run because the webpage is active'
+                    globMyLog.info('not going to do full run because the webpage is active')
+                    logCount1 = 1
             else:
-                logCount = 0
+                logCount1 = 0
+                if logCount2 == 0:
+                    if doPrint:
+                        print 'going to start FullRun'
+                    globMyLog.info('going to start FullRun')
+                    logCount2 = 1
                 
                 if streamStarted == False:
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
@@ -614,9 +614,9 @@ while True:
                     own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
                     own_util.uploadAndPurge(logFilePath, 1)
                 else:
-                    # There are extra connections so stop MJPEG stream.
+                    # The webpage is active, so stop MJPEG stream.
                     # Stop MJPEG stream. Use sudo because stream can be started by another user.
-                    globMyLog.info('extra connections, going to stop stream')
+                    globMyLog.info('webpage active, going to stop stream')
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     streamStarted = False
 
