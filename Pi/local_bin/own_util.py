@@ -75,6 +75,13 @@ def moveCamAbs(degrees):
         stdOutAndErr = runI2cCommandWait('12 ' + str(128 + degrees))
 
 
+def switchLight(on):
+    if on == True:
+        stdOutAndErr = runI2cCommandWait('20')
+    else:
+        stdOutAndErr = runI2cCommandWait('21')
+
+
 def getBatteryLevel():
     stdOutAndErr = runI2cCommandWait('0')
     # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
@@ -84,6 +91,17 @@ def getBatteryLevel():
         return m.group(1)
     else:
         return 'unknown'
+
+
+def getWifiStatus():
+    stdOutAndErr = runShellCommandWait('/sbin/iwconfig')
+    # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+    expr = re.compile('.*ESSID:"(.*)".*?Signal level=(.*dBm)', re.DOTALL)
+    m = expr.match(stdOutAndErr)
+    if m is not None:  # m will be not None only when both capture groups are valid.
+        return m.group(1) + ': ' + m.group(2)
+    else:
+        return 'wifi unknown'
 
 
 # Global variables for getBatteryLevel(), used as static variables.

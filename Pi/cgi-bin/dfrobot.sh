@@ -13,18 +13,20 @@ function socketSendAndReceive {
     # Send message (first parameter) to socket.
     echo -n ${1} > /dev/null 2>&1 >&3
     # Read message back from socket into globSocketMessageReceived, with a timeout of 0.5 second.
-    # This timeout must be larger than the delay in the server loop.
+    # This timeout must be smaller than the delay in the server loop.
     read -r -t 0.5 globSocketMessageReceived <&3
     if [ -z "$globSocketMessageReceived" ]
     then
-    globSocketMessageReceived="no reply received!"
+        globSocketMessageReceived="no reply received!"
     fi
     # Close socket for read and write.
     exec 3<&-
     exec 3>&-
 }
 
-# This function will be called for every html form action.
+# Global variabele which will contain the status received.
+# A global variabele is used as bash functions cannot return values.
+globStatus=""
 function handle_command {
     prompt=$(basename $0)
     # Reset the log file to zero length if the size gets too large.
@@ -34,10 +36,6 @@ function handle_command {
     else
         echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
     fi
-
-    # Send a "webaccess active" message to the socket server to indicate web access is active.
-    # The server can then take appropriate action, for example stop motion detection.
-    socketSendAndReceive "webaccess active"
 
     if [ "${1}" == "start-stream-hq" ]
     then
@@ -97,51 +95,34 @@ function handle_command {
         echo "***** $(date), $prompt: going to upload and purge logfile" >> /home/pi/log/dfrobot_log.txt ;\
         python -c 'import sys; sys.path.append("/usr/local/bin"); import own_util; own_util.uploadAndPurge("/home/pi/log/dfrobot_log.txt", 1)' > /dev/null 2>&1 ;\
     ) > /dev/null 2>&1 &
-    elif [ "${1}" == "forward" ]
+    elif [ "${1}" == "forward" ] || [ "${1}" == "backward" ] || [ "${1}" == "left" ] || [ "${1}" == "right" ]
     then
-        echo "***** $(date), $prompt: 'forward' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 1 ${2} > /dev/null 2>&1
-    elif [ "${1}" == "backward" ]
+        echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1} ${2}"
+    elif [ "${1}" == "cam-move" ]
     then
-        echo "***** $(date), $prompt: 'backward' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 2 ${2} > /dev/null 2>&1
-    elif [ "${1}" == "left" ]
+        echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1} ${2}"
+    elif [ "${1}" == "light-on" ] || [ "${1}" == "light-off" ]
     then
-        echo "***** $(date), $prompt: 'left' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 3 ${2} > /dev/null 2>&1
-    elif [ "${1}" == "right" ]
-    then
-        echo "***** $(date), $prompt: 'right' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 4 ${2} > /dev/null 2>&1
-    elif [ "${1}" == "cam-up" ]
-    then
-        echo "***** $(date), $prompt: 'cam-up' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 10 ${2} > /dev/null 2>&1
-    elif [ "${1}" == "cam-down" ]
-    then
-        echo "***** $(date), $prompt: 'cam-down' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 11 ${2} > /dev/null 2>&1
-    elif [ "${1}" == "light-on" ]
-    then
-        echo "***** $(date), $prompt: 'light-on' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 20 > /dev/null 2>&1
-    elif [ "${1}" == "light-off" ]
-    then
-        echo "***** $(date), $prompt: 'light-off' command received" >> /home/pi/log/dfrobot_log.txt
-        i2c_cmd 21 > /dev/null 2>&1
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1}"
     elif [ "${1}" == "home-start" ]
     then
-        echo "***** $(date), $prompt: 'home-start' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "home_start"
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1}"
         # Force complete page refresh to correctly show the new MJPEG stream.
         do_refresh_page=true
     elif [ "${1}" == "home-stop" ]
     then
-        echo "***** $(date), $prompt: 'home-stop' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "home_stop"
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1}"
     elif [ "${1}" == "status" ]
     then
-        echo "***** $(date), $prompt: 'status' command received" >> /home/pi/log/dfrobot_log.txt
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1}"
+        globStatus=$globSocketMessageReceived
+        # Indicate to refresh the status frame.
         do_refresh_frame=true
     fi
 }
@@ -206,16 +187,12 @@ elif [ $do_refresh_frame = false ]
 then
     echo -e "Status:304\n"
 else
-    # Get actual status so it can be sent to the web client.
-    wifistatus=/sbin/iwconfig
-    status="<br>$($wifistatus | sed -n 's/^.*ESSID:"\([^"]*\).*$/\1/p') level = $($wifistatus | sed -n 's/^.*level=\([^ ]*\).*$/\1/p') dBm<br>uptime = $(/usr/bin/uptime | sed -n 's/.*up \([^,]*\).*/\1/p')<br>battery = $(i2c_cmd 0 | sed -n 's/^.*Received \([^ ]*\).*$/\1/p') (154 = 6V)"
-
     # Send 'index1.html' to the web client, after replacing the 'feedbackstring' with the actual status.
     echo -e "Content-type: text/html\n"
     while read line
     do
         # Replace 'feedbackstring' in original string with the actual status.
-        echo -e ${line/feedbackstring/$status}
+        echo -e ${line/feedbackstring/$globStatus}
     done < ${1}
 fi
 

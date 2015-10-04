@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import urllib
 import argparse
+import re
 import time
 import compass
 import logging
@@ -70,6 +71,8 @@ def getNewImage():
             globImg = img
             globNewImageAvailable = True
             globNewImageAvailableLock.release()
+    # Close the stream to have a correct administration of the number of connections.
+    globStream.close()
 
 
 def homeRun():
@@ -295,12 +298,10 @@ def homeRun():
         else:
             globNewImageAvailableLock.release()
 
-    # Stop the getNewImage thread and indicate HomeRun is finished.
+    # Stop the getNewImage thread and indicate Home run is finished.
     globContinueCapture = False
     communication.globDoHomeRun = False
-    # Close the stream to have a correct administration of the number of connections.
-    globStream.close()
-    # Convert the homerun images to a video and remove the images.
+    # Convert the Home run images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
     globMyLog.info(stdOutAndErr)
     # Remove tmp_img and tmp_tmp_img files.
@@ -329,12 +330,11 @@ def captureAndMotionDetection():
     globMyLog.info(stdOutAndErr)
 
     logCount = 0
-    while globContinueCapture == True and communication.globDoFullRun == True:
-        if communication.globWebAccess == True:
+    while globContinueCapture == True:
+        if communication.globInteractive == True:
             if doPrint:
-                print 'stopping capture and motion detection because the webpage is active'
-            globMyLog.info('stopping capture and motion detection because the webpage is active')
-            globStream.close()
+                print 'stopping capture and motion detection because the interactive mode is active'
+            globMyLog.info('stopping capture and motion detection because the interactive mode is active')
             globContinueCapture = False
             return False
     
@@ -475,8 +475,6 @@ def captureAndMotionDetection():
         else:
             globNewImageAvailableLock.release()
 
-    # Close the stream to have a correct administration of the number of connections.
-    globStream.close()
     # Motion detection loop is finished. The images are in a circular buffer and the first image with
     # motion is at firstImageIndex. Before this image there are MotionDetectionBufferOffset images
     # before the motion.
@@ -520,7 +518,7 @@ def createMyLog(path):
                                   
 # Main script.
 # This script can run the robot in different modes:
-# Full run:
+# Default run:
 #   The robot does motion detection and uploads a video to Google Drive when motion is detected.
 #   Once every hour the robot drives out of its garage, makes an exploratory round
 #   and returns to the garage where it makes connection with the charging station.
@@ -530,9 +528,7 @@ def createMyLog(path):
 
 # Handle arguments.
 parser = argparse.ArgumentParser()
-parser.add_argument('--log', default='/home/pi/log/dfrobot_fullrunlog.txt')
-parser.add_argument('--fullrun', action='store_true')
-parser.add_argument('--homerun', action='store_true')
+parser.add_argument('--log', default='/home/pi/log/dfrobot_runlog.txt')
 parser.add_argument('--doprint', action='store_true')
 parser.add_argument('--testmotion', action='store_true')
 parser.add_argument('--show', action='store_true')
@@ -540,16 +536,11 @@ parser.add_argument('--nomove', action='store_true')
 args = parser.parse_args()
 
 logFilePath = args.log
-if args.fullrun:
-    communication.globDoFullRun = True
-if args.homerun:
-    communication.globDoHomeRun = True
 if args.doprint:
     doPrint = True
 if args.testmotion:
     doTestMotion = True
     doPrint = True
-    communication.globDoFullRun = True
     communication.globDoMotionDetection = True
 if args.show:
     doShow = True
@@ -567,79 +558,98 @@ communication.sendWhatsAppMsg('I am up and running!')
 # Start Socket client.
 communication.startSocketClient()
 
-# Catch exceptions and log them.
+streamStarted = False
+modePrevious = ''
 while True:
+    # Catch exceptions and log them.
     try:
-        streamStarted = False
-        logCount1 = 0
-        logCount2 = 0
-        while communication.globDoFullRun:
-            # Full run
-            # First check if the webpage is active. If so, do not continue.
-            if communication.globWebAccess == True:
-                logCount2 = 0
-                if logCount1 == 0:
+        # Short sleep to preempt this thread. Otherwise this thread will be dominating and other threads
+        # like the socketClient thread will not run at regular times.
+        time.sleep(0.001)
+        
+        if communication.globInteractive == True:
+            # Intearctive mode
+            if modePrevious != 'INTERACTIVE':
+                if doPrint:
+                    print 'going to start interactive mode'
+                globMyLog.info('going to start interactive mode')
+                modePrevious = 'INTERACTIVE'
+            expr = re.compile('(.+?)(?:$| )')
+            cmdList = expr.findall(communication.globCmd)
+            # Now cmdList is a a list containing the cmd and its parameters. The cmdList[0] contains the command.
+            # If there are no parameters len(cmdList) == 1.
+            if len(cmdList) > 0:
+                if doPrint:
+                    print 'command received:', str(cmdList)
+                globMyLog.info('command received: ' + str(cmdList))
+                if cmdList[0] == 'home-start':
+                    # Home run
+                    globMyLog.info('going to start Home run')
                     if doPrint:
-                        print 'not going to do full run because the webpage is active'
-                    globMyLog.info('not going to do full run because the webpage is active')
-                    logCount1 = 1
-            else:
-                logCount1 = 0
-                if logCount2 == 0:
-                    if doPrint:
-                        print 'going to start FullRun'
-                    globMyLog.info('going to start FullRun')
-                    logCount2 = 1
-                
-                if streamStarted == False:
+                        print 'Going to start Home run'
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start stream')
+                    time.sleep(0.5)
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
-                    streamStarted = True
-                        
-                globMyLog.info('going to call captureAndMotionDetection()')
-                # Call captureAndMotionDetection(). This function returns with True when motion is detected
-                # and dfrobot_pivid_motion.avi is created. It returns false when no motion is detected but other
-                # connectios are becoming active.
-                motionDetected = captureAndMotionDetection()
-
-                if motionDetected:
-                    if doPrint:
-                        print 'motion detected, going to upload to Google Drive'
-                    globMyLog.info('motion detected, going to upload to Google Drive')
+                    homeRun()
                     # Upload and purge the video file and log file.
-                    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
+                    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
                     own_util.uploadAndPurge(logFilePath, 1)
-                else:
-                    # The webpage is active, so stop MJPEG stream.
-                    # Stop MJPEG stream. Use sudo because stream can be started by another user.
-                    globMyLog.info('webpage active, going to stop stream')
-                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
-                    streamStarted = False
+        
+                    # Home run is finished, switch back to default run.
+                    communication.globDoHomeRun = False
 
-        if communication.globDoHomeRun:
-            # Home run
-            globMyLog.info('going to start HomeRun')
-            if doPrint:
-                print 'Going to start HomeRun'
-            # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
-            stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
-            globMyLog.info('going to start stream')
-            time.sleep(0.5)
-            own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
-            # Delay to give stream time to start up and camera to stabilize.
-            time.sleep(5)
-            homeRun()
-            # Upload and purge the video file and log file.
-            own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
-            own_util.uploadAndPurge(logFilePath, 1)
+                elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
+                    own_util.move(cmdList[0], cmdList[1], 0, doMove)
+                elif cmdList[0] == 'cam-move':
+                    own_util.moveCamRel(int(cmdList[1]))
+                elif cmdList[0] == 'light-on':
+                    own_util.switchLight(True)
+                elif cmdList[0] == 'light-off':
+                    own_util.switchLight(False)
+
+                # Command handled, so make empty.
+                communication.globCmd = ''
+
+        else:
+            # Default run mode
+            if modePrevious != 'DEFAULTRUN':
+                if doPrint:
+                    print 'going to start Default run'
+                globMyLog.info('going to start Default run')
+                modePrevious = 'DEFAULTRUN'
             
-            # HomeRun is finished, switch back to full run.
-            communication.globDoHomeRun = False
-            communication.globDoFullRun = True
+            if streamStarted == False:
+                # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
+                stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                globMyLog.info('going to start stream')
+                own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                # Delay to give stream time to start up and camera to stabilize.
+                time.sleep(5)
+                streamStarted = True
+    
+            globMyLog.info('going to call captureAndMotionDetection()')
+            # Call captureAndMotionDetection(). This function returns with True when motion is detected
+            # and dfrobot_pivid_motion.avi is created. It returns false when the interactive mode is active.
+            motionDetected = captureAndMotionDetection()
+            
+            if motionDetected:
+                if doPrint:
+                    print 'motion detected, going to upload to Google Drive'
+                globMyLog.info('motion detected, going to upload to Google Drive')
+                # Upload and purge the video file and log file.
+                own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
+                own_util.uploadAndPurge(logFilePath, 1)
+            else:
+                # The interactive mode is active. The current MJPEG stream can be kept running.
+                # However we indicate to (re)start a new stream at the next Default run, because
+                # the stream can be switched by an interactive user.
+                # Stop MJPEG stream. Use sudo because stream can be started by another user.
+                streamStarted = False
+
     except Exception,e:
         globMyLog.info('run_dfrobot exception: ' + str(e))
         raise
