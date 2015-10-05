@@ -20,7 +20,8 @@ import own_util
 SendTextOrImageToWhatsApp = 'Image'  # Fill in 'Text' or 'Image'.
 ImgWidth = 800
 ImgHeight = 600
-Fps = 2
+FpsLq = 2
+FpsHq = 10
 DirectionFront = 293.0
 DirectionRight = 25.0
 DirectionBack = 115.0
@@ -34,8 +35,8 @@ SizeCorrect = 20.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
 SizeSlow = 20.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
 SizeStop = 40.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
 # Motion detection constants.
-MotionDetectionBufferLength = Fps * 30  # Number of images in motion detection buffer.
-MotionDetectionBufferOffset = Fps * 3   # Number of images that are kept before the motion is detected.
+MotionDetectionBufferLength = FpsLq * 30  # Number of images in motion detection buffer.
+MotionDetectionBufferOffset = FpsLq * 3   # Number of images that are kept before the motion is detected.
 GrayLevelDifferenceTreshold = 20        # The larger this number the larger the graylevel difference must be to be considered as true motion.
 MinContourArea = 100 * ImgAreaFactor    # The larger this number the larger the motion contours must be to be considerd as true motion.
 MaxNofContours = 200                    # Maximum number of contours otherwise it will not be considered as true motion.
@@ -288,7 +289,7 @@ def homeRun():
                 cv2.waitKey(100)
             
             # Increase imgCount with a maximum for protection.
-            imgCount = (imgCount + 1) % (Fps * 300)
+            imgCount = (imgCount + 1) % (FpsLq * 300)
 
             # Ready with movement. Make globNewImageAvailable false to make sure a new image is taken after movement.
             # Keep critical section as short as possible.
@@ -302,7 +303,7 @@ def homeRun():
     globContinueCapture = False
     communication.globDoHomeRun = False
     # Convert the Home run images to a video and remove the images.
-    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
+    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
     globMyLog.info(stdOutAndErr)
     # Remove tmp_img and tmp_tmp_img files.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
@@ -496,7 +497,7 @@ def captureAndMotionDetection():
         except IOError:
             pass
     # Motion detection images are shifted now. Convert the images to a video and remove the images.
-    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(Fps) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
+    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
     globMyLog.info(stdOutAndErr)
     # Remove tmp_img and tmp_tmp_img files.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
@@ -582,7 +583,44 @@ while True:
                 if doPrint:
                     print 'command received:', str(cmdList)
                 globMyLog.info('command received: ' + str(cmdList))
-                if cmdList[0] == 'home-start':
+                if cmdList[0] == 'start-stream-hq':
+                    # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                    globMyLog.info('going to start hq stream')
+                    if doPrint:
+                        print 'going to start hq stream'
+                    time.sleep(0.5)
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsHq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                if cmdList[0] == 'start-stream-lq':
+                    # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                    globMyLog.info('going to start lq stream')
+                    if doPrint:
+                        print 'going to start lq stream'
+                    time.sleep(0.5)
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                if cmdList[0] == 'stop-stream':
+                    # Stop stream. Use sudo because stream can be started by another user.
+                    globMyLog.info('going to stop stream')
+                    if doPrint:
+                        print 'going to stop stream'
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                if cmdList[0] == 'capture-start':
+                    # Start capture video from http stream, with timeout of 60 seconds.
+                    globMyLog.info('going to start capture http MJPEG stream')
+                    if doPrint:
+                        print 'going to start capture http MJPEG stream'
+                    own_util.runShellCommandNowait('cvlc http://localhost:44445/?action=stream --sout \'#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}\' --run-time=60 vlc://quit')
+                if cmdList[0] == 'capture-stop':
+                    # Stop capture video from http stream.
+                    globMyLog.info('going to stop capture http MJPEG stream')
+                    if doPrint:
+                        print 'going to stop capture http MJPEG stream'
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall vlc')
+                    # Upload and purge the video file and log file.
+                    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4', NofHomeRunVideosToKeep)
+                    own_util.uploadAndPurge(logFilePath, 1)
+                elif cmdList[0] == 'home-start':
                     # Home run
                     globMyLog.info('going to start Home run')
                     if doPrint:
@@ -591,7 +629,7 @@ while True:
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start stream')
                     time.sleep(0.5)
-                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
@@ -626,7 +664,7 @@ while True:
                 # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                 stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                 globMyLog.info('going to start stream')
-                own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(Fps) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 # Delay to give stream time to start up and camera to stabilize.
                 time.sleep(5)
                 streamStarted = True

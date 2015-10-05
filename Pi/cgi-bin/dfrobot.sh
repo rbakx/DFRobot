@@ -37,64 +37,15 @@ function handle_command {
         echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
     fi
 
-    if [ "${1}" == "start-stream-hq" ]
+    if [ "${1}" == "start-stream-hq" ] || [ "${1}" == "start-stream-lq" ] || [ "${1}" == "stop-stream" ]
     then
-        echo "***** $(date), $prompt: 'start-stream-hq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Stop previous stream first if any. Use sudo because stream can be started by another user.
-        sudo killall mjpg_streamer > /dev/null 2>&1
-        sleep 0.5
-        # Start capturing video stream. Execute in background to prevent blocking webpage refresh.
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 10 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1 &
-        # Force complete page refresh to correctly show the new MJPEG stream.
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1}"
+        # Force complete page refresh to correctly show the new or stopped MJPEG stream.
         do_refresh_page=true
-    elif [ "${1}" == "start-stream-lq" ]
+    elif [ "${1}" == "capture-start" ] || [ "${1}" == "capture-stop" ]
     then
-        echo "***** $(date), $prompt: 'start-stream-lq' command received" >> /home/pi/log/dfrobot_log.txt
-        # Stop previous stream first if any. Use sudo because stream can be started by another user.
-        sudo killall mjpg_streamer > /dev/null 2>&1
-        sleep 0.5
-        # Start low quality video stream. Execute in background to prevent blocking webpage refresh.
-        LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps 2 -q 10 -x 800 -y 600" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www" > /dev/null 2>&1 &
-        # Force complete page refresh to correctly show the new MJPEG stream.
-        do_refresh_page=true
-    elif [ "${1}" == "stop-stream" ]
-    then
-        echo "***** $(date), $prompt: 'stop-stream' command received" >> /home/pi/log/dfrobot_log.txt
-        # Use sudo because stream can be started by another user.
-        sudo killall mjpg_streamer > /dev/null 2>&1
-        # Force complete page refresh to correctly show the stopped MJPEG stream.
-        do_refresh_page=true
-    elif [ "${1}" == "capture-start" ]
-    then
-        echo "***** $(date), $prompt: 'capture-start' command received" >> /home/pi/log/dfrobot_log.txt
-        # Start capture video from http stream, with timeout of 60 seconds.
-        echo "***** $(date), $prompt: going to capture http MJPEG stream" >> /home/pi/log/dfrobot_log.txt
-        cvlc http://localhost:44445/?action=stream --sout '#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}' --run-time=60 vlc://quit > /dev/null 2>&1 &
-    elif [ "${1}" == "capture-stop" ]
-    then
-        echo "***** $(date), $prompt: 'capture-stop' command received" >> /home/pi/log/dfrobot_log.txt
-        # Stop the video capture, upload to Google drive and purge the uploaded files on Google Drive.
-        # These commands have to be execuded in sequence. Because we want the webpage and therefore this script to
-        # be responsive we execute all these tasks in sequence in one background task with:
-        # ( command1; command 2; command 3) > /dev/null 2>&1 &
-        # The extra '> /dev/null 2>&1' is needed to capture the output of the 'moving to background' symbol '&'.
-        # This because the stdout of this script is returned to the browser and is strictly defined.
-        ( \
-        killall vlc > /dev/null 2>&1 ;\
-        # Going to upload and purge the video and logfile to Google Drive using the 'drive' utility.
-        # Run 'drive' as www-data to prevent Google Drive authentication problems.
-        # To upload into the 'DFRobotUploads' folder, the -p option is used with the id of this folder.
-        # When the 'DFRobotUploads' folder is changed, a new id has to be provided.
-        # This id can be obtained using 'drive list -t DFRobotUploads'.
-        # The uploaded file has a distinctive name to enable finding and removing it again with the 'drive' utility.
-        # To upload and purge a file the python function uploadAndPurge() in own_util.py is used.
-        # To call this function from this script 'python -c' is used to first import own_util.
-        # To enable importing this module from anywhere we have to add the location to the python system path.
-        echo "***** $(date), $prompt: going to upload and purge videofile" >> /home/pi/log/dfrobot_log.txt ;\
-        python -c 'import sys; sys.path.append("/usr/local/bin"); import own_util; own_util.uploadAndPurge("/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4", 3)' > /dev/null 2>&1 ;\
-        echo "***** $(date), $prompt: going to upload and purge logfile" >> /home/pi/log/dfrobot_log.txt ;\
-        python -c 'import sys; sys.path.append("/usr/local/bin"); import own_util; own_util.uploadAndPurge("/home/pi/log/dfrobot_log.txt", 1)' > /dev/null 2>&1 ;\
-    ) > /dev/null 2>&1 &
+        socketSendAndReceive "${1}"
     elif [ "${1}" == "forward" ] || [ "${1}" == "backward" ] || [ "${1}" == "left" ] || [ "${1}" == "right" ]
     then
         echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
