@@ -256,23 +256,20 @@ def whatsAppClient():
                 sendWhatsAppMsg('hi there!')
             elif re.search('.*feel.*', msg, re.IGNORECASE):
                 level = own_util.getBatteryLevel()
-                if level != 'unknown':
-                    if int(level) > 190:
-                        sendWhatsAppMsg('I feel great, my energy level is ' + level)
-                    elif int(level) > 170:
-                        sendWhatsAppMsg('I feel ok, my energy level is ' + level)
-                    else:
-                        sendWhatsAppMsg('I feel a bit weak, my energy level is ' + level)
+                if level > 190:
+                    sendWhatsAppMsg('I feel great, my energy level is ' + str(level))
+                elif level > 170:
+                    sendWhatsAppMsg('I feel ok, my energy level is ' + str(level))
                 else:
-                    sendWhatsAppMsg('I am not sure, my energy level is unknown')
+                    sendWhatsAppMsg('I feel a bit weak, my energy level is ' + str(level))
             elif re.search('how are you', msg, re.IGNORECASE):
                 sendWhatsAppMsg('I am fine, thx for asking!')
             elif re.search('battery', msg, re.IGNORECASE):
                 charging = own_util.checkCharging()
                 if charging == True:
-                    sendWhatsAppMsg('I am charging, my battery level is ' + own_util.getBatteryLevel())
+                    sendWhatsAppMsg('I am charging, my battery level is ' + str(own_util.getBatteryLevel()))
                 else:
-                    sendWhatsAppMsg('I am not charging, my battery level is ' + own_util.getBatteryLevel())
+                    sendWhatsAppMsg('I am not charging, my battery level is ' + str(own_util.getBatteryLevel()))
             elif re.search('awake', msg, re.IGNORECASE):
                 sendWhatsAppMsg('I am awake for ' + own_util.getUptime())
             elif re.search('joke', msg, re.IGNORECASE):
@@ -430,7 +427,7 @@ def socketClient():
                 globDoHomeRun = False
             elif re.search('status', msg, re.IGNORECASE):
                 # Get status for webpage.
-                statusForWebPage = '<br>' + own_util.getWifiStatus() + '<br>' + 'uptime: ' + own_util.getUptime() + '<br>' + 'battery: ' + own_util.getBatteryLevel() + ' (154 = 6V)'
+                statusForWebPage = '<br>' + own_util.getWifiStatus() + '<br>' + 'uptime: ' + own_util.getUptime() + '<br>' + 'battery: ' + str(own_util.getBatteryLevel()) + ' (154 = 6V)'
                 sendSocketMsg(statusForWebPage)
             else:
                 # Handle the interactive commands which take at most a few seconds and do not change the mode.

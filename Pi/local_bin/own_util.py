@@ -8,28 +8,11 @@ import re
 import inspect
 import logging
 import numpy as np
+import i2c
 
 
-# Global variables
-globI2cLock = None
-
-
-def createI2cLock():
-    global globI2cLock
-    # Create lock for i2c communication; only one thread may take the i2c bus.
-    if globI2cLock == None:
-        globI2cLock = thread.allocate_lock()
-
-
-def runI2cCommandWait(cmd):
-    global globI2cLock
-    createI2cLock() # Create i2c lock if it does not exist yet.
-    # Lock  i2c communication for this thread.
-    globI2cLock.acquire()
-    stdOutAndErr = subprocess.Popen('/usr/local/bin/i2c_cmd ' + cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
-    # Release i2c communication for this thread.
-    globI2cLock.release()
-    return stdOutAndErr
+# Global variables.
+slaveAddressArduino = 0x04
 
 
 def runShellCommandWait(cmd):
@@ -57,40 +40,99 @@ def move(direction, speed, delay, doMove):
             dir = 4
         else:
             dir = 0
-        stdOutAndErr = runI2cCommandWait(str(dir) + ' ' + str(speed))
+        # Create i2c lock if it does not exist yet.
+        i2c.createI2cLock()
+        # Lock  i2c communication for this thread.
+        i2c.globI2cLock.acquire()
+        i2c.write_byte(slaveAddressArduino, 0, dir)
+        i2c.write_byte(slaveAddressArduino, 0, int(speed))
+        # Delay for i2c communication.
+        time.sleep(i2c.globI2cDelay)
+        # Release i2c communication for this thread.
+        i2c.globI2cLock.release()
     # Still delay when doMove == False to have similar timing.
     time.sleep(delay)
 
 
-def moveCamRel(degrees):
+def moveCamRel(degrees, delay):
     if degrees >= -90 and degrees <= 90:
         if degrees > 0:
-            stdOutAndErr = runI2cCommandWait('10 ' + str(128 + degrees))
+            # Create i2c lock if it does not exist yet.
+            i2c.createI2cLock()
+            # Lock  i2c communication for this thread.
+            i2c.globI2cLock.acquire()
+            i2c.write_byte(slaveAddressArduino, 0, 10)
+            i2c.write_byte(slaveAddressArduino, 0, 128 + int(degrees))
+            # Delay for i2c communication.
+            time.sleep(i2c.globI2cDelay)
+            # Release i2c communication for this thread.
+            i2c.globI2cLock.release()
         elif degrees < 0:
-            stdOutAndErr = runI2cCommandWait('11 ' + str(128 - degrees))
+            # Create i2c lock if it does not exist yet.
+            i2c.createI2cLock()
+            # Lock  i2c communication for this thread.
+            i2c.globI2cLock.acquire()
+            i2c.write_byte(slaveAddressArduino, 0, 11)
+            i2c.write_byte(slaveAddressArduino, 0, 128 - int(degrees))
+            # Delay for i2c communication.
+            time.sleep(i2c.globI2cDelay)
+            # Release i2c communication for this thread.
+            i2c.globI2cLock.release()
+        # Delay to let camera image stabilize.
+        time.sleep(delay)
 
 
-def moveCamAbs(degrees):
+def moveCamAbs(degrees, delay):
     if degrees >= 0 and degrees <= 90:
-        stdOutAndErr = runI2cCommandWait('12 ' + str(128 + degrees))
+        # Create i2c lock if it does not exist yet.
+        i2c.createI2cLock()
+        # Lock  i2c communication for this thread.
+        i2c.globI2cLock.acquire()
+        i2c.write_byte(slaveAddressArduino, 0, 12)
+        i2c.write_byte(slaveAddressArduino, 0, 128 + int(degrees))
+        # Delay for i2c communication.
+        time.sleep(i2c.globI2cDelay)
+        # Release i2c communication for this thread.
+        i2c.globI2cLock.release()
+        # Delay to let camera image stabilize.
+        time.sleep(delay)
 
 
 def switchLight(on):
     if on == True:
-        stdOutAndErr = runI2cCommandWait('20')
+        # Create i2c lock if it does not exist yet.
+        i2c.createI2cLock()
+        # Lock  i2c communication for this thread.
+        i2c.globI2cLock.acquire()
+        i2c.write_byte(slaveAddressArduino, 0, 20)
+        # Delay for i2c communication.
+        time.sleep(i2c.globI2cDelay)
+        # Release i2c communication for this thread.
+        i2c.globI2cLock.release()
     else:
-        stdOutAndErr = runI2cCommandWait('21')
+        # Create i2c lock if it does not exist yet.
+        i2c.createI2cLock()
+        # Lock  i2c communication for this thread.
+        i2c.globI2cLock.acquire()
+        i2c.write_byte(slaveAddressArduino, 0, 21)
+        # Delay for i2c communication.
+        time.sleep(i2c.globI2cDelay)
+        # Release i2c communication for this thread.
+        i2c.globI2cLock.release()
 
 
 def getBatteryLevel():
-    stdOutAndErr = runI2cCommandWait('0')
-    # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-    expr = re.compile('.*Received ([0-9]+).*', re.DOTALL)
-    m = expr.match(stdOutAndErr)
-    if m != None:
-        return m.group(1)
-    else:
-        return 'unknown'
+    # Create i2c lock if it does not exist yet.
+    i2c.createI2cLock()
+    # Lock  i2c communication for this thread.
+    i2c.globI2cLock.acquire()
+    i2c.write_byte(slaveAddressArduino, 0, 0)
+    level = i2c.read_byte(slaveAddressArduino, 0)
+    # Delay for i2c communication.
+    time.sleep(i2c.globI2cDelay)
+    # Release i2c communication for this thread.
+    i2c.globI2cLock.release()
+    return level
 
 
 def getWifiStatus():
@@ -115,16 +157,14 @@ globBatteryLevelsIndex = 0  # index in the circular buffer.
 def checkCharging():
     global globBatteryLevels, globBatteryLevelsIndex
     charging = False
-    strLevel = getBatteryLevel()
-    if strLevel != 'unknown':
-        level = int(strLevel)
-        globBatteryLevels[globBatteryLevelsIndex] = level
-        globBatteryLevelsIndex = globBatteryLevelsIndex + 1
-        if globBatteryLevelsIndex >= 30:
-            globBatteryLevelsIndex = 0
-        # If standard deviation of numpy array with battery levels > 2.0 then the batteries are being charged.
-        if np.std(globBatteryLevels) > 2.0:
-            charging = True
+    level = getBatteryLevel()
+    globBatteryLevels[globBatteryLevelsIndex] = level
+    globBatteryLevelsIndex = globBatteryLevelsIndex + 1
+    if globBatteryLevelsIndex >= 30:
+        globBatteryLevelsIndex = 0
+    # If standard deviation of numpy array with battery levels > 2.0 then the batteries are being charged.
+    if np.std(globBatteryLevels) > 2.0:
+        charging = True
     return charging
 
 

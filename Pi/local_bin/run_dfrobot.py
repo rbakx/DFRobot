@@ -31,9 +31,10 @@ ImgWidthFactor = ImgWidth / 640.0  # Calibrated with 640 * 480 image.
 ImgHeightFactor = ImgHeight / 480.0  # Calibrated with 640 * 480 image.
 ImgAreaFactor = (ImgWidth * ImgHeight) / (640.0 * 480.0)  # Calibrated with 640 * 480 image.
 # Blob detection constants
-SizeCorrect = 20.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
-SizeSlow = 20.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
-SizeStop = 40.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
+SizeMinForCorrection = 30.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
+SizeMaxForCorrection = 40.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
+SizeSlow = 30.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
+SizeStop = 60.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
 # Motion detection constants.
 MotionDetectionBufferLength = FpsLq * 30  # Number of images in motion detection buffer.
 MotionDetectionBufferOffset = FpsLq * 3   # Number of images that are kept before the motion is detected.
@@ -93,6 +94,9 @@ def homeRun():
     # Remove tmp_img and tmp_tmp_img files to be sure no tmp images are left from a previous run.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
     globMyLog.info(stdOutAndErr)
+    
+    # Start with cam down.
+    own_util.moveCamAbs(0, 0.1)
 
     while globContinueCapture == True and communication.globDoHomeRun == True:
         # Keep critical section as short as possible.
@@ -155,50 +159,53 @@ def homeRun():
             validBlobsFound = False
             for blob in sortedBlobs:
                 # Fill in three blobs, left, middle, right.
-                if blobLeft == None:
+                if blobLeft is None:
                     blobLeft = blob
-                elif blobMiddle == None:
-                    # Skip blop if it is significantly smaller than the first blob.
-                    if blob.size < blobLeft.size/2.0:
+                elif blobMiddle is None:
+                    # Check if there is a middle blob found which is 3 times smaller than the left blob.
+                    if blob.size > blobLeft.size/4.0 and blob.size < blobLeft.size/2.0:
+                        blobMiddle = blob
                         continue
-                    blobMiddle = blob
-                elif blobRight == None:
+                if blobRight is None:
                     # Skip blop if it is significantly smaller than the first blob.
                     if blob.size < blobLeft.size/2.0:
                         continue
                     blobRight = blob
-                    # We have three blobs now, check if these are valid
+                    # We have two or three blobs now, check if these are valid
                     # For now we consider the blobs valid if the left and right one have appr. equal size.
+                    # The size of a blob is radius in pixels.
                     distBlobLeftBlobRight = blobRight.pt[0] - blobLeft.pt[0]
                     avgSizeBlobLeftBlobRight = (blobLeft.size + blobRight.size) / 2.0
-                    if abs((blobLeft.size - blobRight.size) / avgSizeBlobLeftBlobRight) < 0.3 and abs((distBlobLeftBlobRight - avgSizeBlobLeftBlobRight * 7.33) / ((distBlobLeftBlobRight + avgSizeBlobLeftBlobRight * 7.33) / 2.0)) < 0.3:
+                    if abs((blobLeft.size - blobRight.size) / avgSizeBlobLeftBlobRight) < 0.3 and abs((distBlobLeftBlobRight - avgSizeBlobLeftBlobRight * 3.0) / ((distBlobLeftBlobRight + avgSizeBlobLeftBlobRight * 3.0) / 2.0)) < 0.3:
                         validBlobsFound = True
                     else:
                         if doPrint:
-                            print 'Blob conditions not met, left:', blobLeft.pt[0], blobLeft.size, 'middle:', blobMiddle.pt[0], blobMiddle.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
+                            if blobMiddle is not None:
+                                print 'Blob conditions not met, left:', blobLeft.pt[0], blobLeft.size, 'middle:', blobMiddle.pt[0], blobMiddle.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
+                            else:
+                                print 'Blob conditions not met, left:', blobLeft.pt[0], blobLeft.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
                     if validBlobsFound:
-                        # We have found three valid blobs, break out of loop.
+                        # We have found two or three valid blobs, break out of loop.
                         break
                     else:
                         # No valid blobs found yet, shift one blob up.
                         # We assume that valid blobs are adjacent.
                         # This is reasonable as the real blobs will indeed be close to each other.
-                        blobLeft = blobMiddle
-                        blobMiddle = blobRight
-                        blobRight = None
+                        if blobMiddle is not None:
+                            blobLeft = blobMiddle
+                            blobMiddle = blobRight
+                            blobRight = None
+                        else:
+                            blobLeft = blobRight
+                            blobRight = None
 
             if correctApproachAngle:
                 # Going to check and correct the approach angle.
                 if correction > 1.5:  # we have to turn to the left, move forward and then turn back again
                     if doPrint:
                         print '********** Going to do approach correction to the left.'
-                        if validBlobsFound:
-                            print '********** Valid blobs found!'
-                            print 'left:', blobLeft.pt[0], blobLeft.size, 'middle:', blobMiddle.pt[0], blobMiddle.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
-                        else:
-                            print '********** No valid blobs found.'
                     own_util.move('left', 240 - correction * 1, 1.0, doMove)
-                    own_util.move('forward', 128 + correction * 3, 1.0, doMove)
+                    own_util.move('forward', 128 + correction * 2, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
                     own_util.move('right', 240 - correction * 1, 5.0, doMove)
                     # approach correction finished
@@ -209,7 +216,7 @@ def homeRun():
                     if doPrint:
                         print 'Going to do approach correction to the right.'
                     own_util.move('right', 240 + correction * 1, 1.0, doMove)
-                    own_util.move('forward', 128 - correction * 3, 1.0, doMove)
+                    own_util.move('forward', 128 - correction * 2, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
                     own_util.move('left', 240 + correction * 1, 5.0, doMove)
                     # approach correction finished
@@ -219,13 +226,21 @@ def homeRun():
 
             elif validBlobsFound:
                 if doPrint:
-                    print '********** Valid blobs found!'
-                    print 'left:', blobLeft.pt[0], blobLeft.size, 'middle:', blobMiddle.pt[0], blobMiddle.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
+                    print '**********', len(sortedBlobs), 'Valid blobs found!'
+                    if blobMiddle is not None:
+                        print 'left:', blobLeft.pt[0], blobLeft.size, 'middle:', blobMiddle.pt[0], blobMiddle.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
+                    else:
+                        print 'left:', blobLeft.pt[0], blobLeft.size, 'right:', blobRight.pt[0], blobRight.size, 'distBlobLeftBlobRight:', distBlobLeftBlobRight
                 # Go home!
                 xmid = (blobLeft.pt[0] + blobRight.pt[0]) / 2.0
                 ymid = (blobLeft.pt[1] + blobRight.pt[1]) / 2.0
+                # Move cam to vertically center the target.
+                own_util.moveCamRel(30 * (ImgHeight/2 - ymid) / ImgHeight, 0.1)
                 course = ImgWidth / 2.0
-                correction = (xmid - blobMiddle.pt[0]) / ImgWidthFactor
+                if blobMiddle is not None:
+                    correction = (xmid - blobMiddle.pt[0]) / ImgWidthFactor
+                else:
+                    correction = 0
                 if doPrint:
                     print 'xmid, course, correction:', xmid, course, correction
                 if xmid < course - ImgWidth / 20.0:
@@ -242,23 +257,25 @@ def homeRun():
                         own_util.move('right', 140, 1.0, doMove)
                     else:
                         own_util.move('right', 128, 1.0, doMove)
-                elif abs(correction) > 2.0 and avgSizeBlobLeftBlobRight > SizeCorrect:
+                elif abs(correction) > 2.0 and avgSizeBlobLeftBlobRight > SizeMinForCorrection and avgSizeBlobLeftBlobRight < SizeMaxForCorrection:
                     correctApproachAngle = True
                 else:
                     if avgSizeBlobLeftBlobRight < SizeStop:
                         if doPrint:
                             print 'move forward'
-                        # Move cam to vertically center the target.
-                        own_util.moveCamRel(30 * (ImgHeight/2 - ymid) / ImgHeight)
                         if avgSizeBlobLeftBlobRight < SizeSlow:
                             own_util.move('forward', 160, 1.0, doMove)
                         else:
                             own_util.move('forward', 140, 1.0, doMove)
                     else:
                         # Move cam down again.
-                        own_util.moveCamAbs(0)
+                        own_util.moveCamAbs(0, 0.1)
+                        # Switch off light if it was on.
+                        own_util.switchLight(False)
+                        # Make one more additional move towards the garage before turning 180 degrees.
+                        own_util.move('forward', 180, 1.0, doMove)
                         compass.gotoDegreeRel(180, doMove)
-                        for i in range(0, 8):
+                        for i in range(0, 6):
                             own_util.move('backward', 140, 1.0, doMove)
                         globMyLog.info('Home found!')
                         globContinueCapture = False
@@ -375,12 +392,12 @@ def captureAndMotionDetection():
                 globMyLog.info('globDoMotionDetection set to True')
                 logCount = 0
 
-            if img_gray != None:
+            if img_gray is not None:
                 img_gray_prev = img_gray.copy()
             img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
             img_gray = cv2.GaussianBlur(img_gray, (21, 21), 0)
             
-            if img_gray_prev != None:
+            if img_gray_prev is not None:
                 img_gray_diff = cv2.absdiff(img_gray, img_gray_prev)
                 img_bw_diff = cv2.threshold(img_gray_diff, GrayLevelDifferenceTreshold, 255, cv2.THRESH_BINARY)[1]
                 (cnts, _) = cv2.findContours(img_bw_diff.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -643,7 +660,7 @@ while True:
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
                     own_util.move(cmdList[0], cmdList[1], 0, doMove)
                 elif cmdList[0] == 'cam-move':
-                    own_util.moveCamRel(int(cmdList[1]))
+                    own_util.moveCamRel(int(cmdList[1]), 0.1)
                 elif cmdList[0] == 'light-on':
                     own_util.switchLight(True)
                 elif cmdList[0] == 'light-off':
