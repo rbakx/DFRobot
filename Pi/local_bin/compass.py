@@ -33,17 +33,17 @@ def readCompass(debug = False):
     # Calibration procedure:
     # Run calibrateCompass() and below fill in the resulting values.
     # Run testCompass() and position the robot such that raw degrees equals 0.
-    # Then physically rotate the robot 180 degrees and fill in measured degrees in measuredDegreesAt180Degrees below.
+    # Then physically rotate the robot 180 degrees and fill in raw degrees in rawDegreesAt180Degrees below.
     # This calibration will result in x_out and y_out varying between -200 and +200.
     # Because the HMC5883L is not exactly linear or mounted exactly horizontal,
     # we apply an extra correction (offsetCorrectionAt180Degrees) at 180 degrees to straigten the curve.
-    x_factor = 0.98
-    x_offset = -28.99
-    y_factor = 0.94
-    y_offset = 16.39
-    measuredDegreesAt180Degrees = 195.0
+    x_factor = 0.97
+    x_offset = -24.70
+    y_factor = 0.90
+    y_offset = 30.77
+    rawDegreesAt180Degrees = 199.87
     
-    offsetCorrectionAt180Degrees = 180.0 - measuredDegreesAt180Degrees
+    offsetCorrectionAt180Degrees = 180.0 - rawDegreesAt180Degrees
     
     # When supplying a 'True' as parameter to this function the raw X Y Z data and the corrected data will be printed.
     # From measurements of these raw values it shows that we have to compensate quite a bit with a gain and offset.
