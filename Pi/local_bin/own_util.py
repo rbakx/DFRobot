@@ -42,7 +42,7 @@ def move(direction, speed, delay, doMove):
             dir = 0
         # Create i2c lock if it does not exist yet.
         i2c.createI2cLock()
-        # Lock  i2c communication for this thread.
+        # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
         i2c.write_byte(slaveAddressArduino, 0, dir)
         i2c.write_byte(slaveAddressArduino, 0, int(speed))
@@ -59,7 +59,7 @@ def moveCamRel(degrees, delay):
         if degrees > 0:
             # Create i2c lock if it does not exist yet.
             i2c.createI2cLock()
-            # Lock  i2c communication for this thread.
+            # Lock i2c communication for this thread.
             i2c.globI2cLock.acquire()
             i2c.write_byte(slaveAddressArduino, 0, 10)
             i2c.write_byte(slaveAddressArduino, 0, 128 + int(degrees))
@@ -70,7 +70,7 @@ def moveCamRel(degrees, delay):
         elif degrees < 0:
             # Create i2c lock if it does not exist yet.
             i2c.createI2cLock()
-            # Lock  i2c communication for this thread.
+            # Lock i2c communication for this thread.
             i2c.globI2cLock.acquire()
             i2c.write_byte(slaveAddressArduino, 0, 11)
             i2c.write_byte(slaveAddressArduino, 0, 128 - int(degrees))
@@ -86,7 +86,7 @@ def moveCamAbs(degrees, delay):
     if degrees >= 0 and degrees <= 90:
         # Create i2c lock if it does not exist yet.
         i2c.createI2cLock()
-        # Lock  i2c communication for this thread.
+        # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
         i2c.write_byte(slaveAddressArduino, 0, 12)
         i2c.write_byte(slaveAddressArduino, 0, 128 + int(degrees))
@@ -102,7 +102,7 @@ def switchLight(on):
     if on == True:
         # Create i2c lock if it does not exist yet.
         i2c.createI2cLock()
-        # Lock  i2c communication for this thread.
+        # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
         i2c.write_byte(slaveAddressArduino, 0, 20)
         # Delay for i2c communication.
@@ -112,7 +112,7 @@ def switchLight(on):
     else:
         # Create i2c lock if it does not exist yet.
         i2c.createI2cLock()
-        # Lock  i2c communication for this thread.
+        # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
         i2c.write_byte(slaveAddressArduino, 0, 21)
         # Delay for i2c communication.
@@ -124,7 +124,7 @@ def switchLight(on):
 def getBatteryLevel():
     # Create i2c lock if it does not exist yet.
     i2c.createI2cLock()
-    # Lock  i2c communication for this thread.
+    # Lock i2c communication for this thread.
     i2c.globI2cLock.acquire()
     i2c.write_byte(slaveAddressArduino, 0, 0)
     level = i2c.read_byte(slaveAddressArduino, 0)

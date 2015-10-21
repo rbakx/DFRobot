@@ -1,7 +1,5 @@
 #!/usr/bin/python
 
-import RPi.GPIO as GPIO
-import smbus
 import time
 import math
 import subprocess
