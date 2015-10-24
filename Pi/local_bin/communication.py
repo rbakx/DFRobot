@@ -265,8 +265,7 @@ def whatsAppClient():
             elif re.search('how are you', msg, re.IGNORECASE):
                 sendWhatsAppMsg('I am fine, thx for asking!')
             elif re.search('battery', msg, re.IGNORECASE):
-                charging = own_util.checkCharging()
-                if charging == True:
+                if own_util.checkCharging() == True:
                     sendWhatsAppMsg('I am charging, my battery level is ' + str(own_util.getBatteryLevel()))
                 else:
                     sendWhatsAppMsg('I am not charging, my battery level is ' + str(own_util.getBatteryLevel()))
@@ -427,7 +426,11 @@ def socketClient():
                 globDoHomeRun = False
             elif re.search('status', msg, re.IGNORECASE):
                 # Get status for webpage.
-                statusForWebPage = '<br>' + own_util.getWifiStatus() + '<br>' + 'uptime: ' + own_util.getUptime() + '<br>' + 'battery: ' + str(own_util.getBatteryLevel()) + ' (154 = 6V)'
+                if own_util.checkCharging() == True:
+                    chargingStr = 'charging'
+                else:
+                    chargingStr = 'not charging'
+                statusForWebPage = '<br>' + own_util.getWifiStatus() + '<br>' + 'uptime: ' + own_util.getUptime() + '<br>' + 'battery: ' + str(own_util.getBatteryLevel()) + ' (154 = 6V), ' + chargingStr
                 sendSocketMsg(statusForWebPage)
             else:
                 # Handle the interactive commands which take at most a few seconds and do not change the mode.
