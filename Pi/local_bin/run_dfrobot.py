@@ -270,13 +270,13 @@ def homeRun():
                     else:
                         # Move cam down again.
                         own_util.moveCamAbs(0, 0.1)
-                        # Switch off light if it was on.
-                        own_util.switchLight(False)
                         # Make one more additional move towards the garage before turning 180 degrees.
                         own_util.move('forward', 180, 1.0, doMove)
                         compass.gotoDegreeRel(180, doMove)
                         for i in range(0, 6):
                             own_util.move('backward', 140, 1.0, doMove)
+                        # Switch off light if it was on.
+                        own_util.switchLight(False)
                         globMyLog.info('Home found!')
                         globContinueCapture = False
 
