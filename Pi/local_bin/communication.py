@@ -190,7 +190,7 @@ class SendReceiveLayer(YowInterfaceLayer):
 
 
 def credentials():
-    return "31629394320","mBZ2lpfVJ39LK/7eRG/l2gkFsiI=" # Put your credentials here!
+    return "31629394299","yYwuot1XujZzhHYT6AcTbwzDvMw=" # Put your credentials here!
 
 
 def whatsAppClient():
