@@ -9,6 +9,7 @@ import re
 import logging
 import time
 import own_util
+import personal_assistant
 import secret
 
 from yowsup.layers                                      import YowLayerEvent
@@ -245,7 +246,12 @@ def whatsAppClient():
 
             # Handle messages.
             msg = receiveWhatsAppMsg()
-            if re.search('.*motion.*on.*', msg, re.IGNORECASE):
+            if re.search('.*robbie.*', msg, re.IGNORECASE):
+                pattern = re.compile("robbie ", re.IGNORECASE)
+                queryStr = pattern.sub("", msg)
+                response = personal_assistant.query(queryStr)
+                sendWhatsAppMsg(response)
+            elif re.search('.*motion.*on.*', msg, re.IGNORECASE):
                 globDoMotionDetection = True
                 sendWhatsAppMsg('motion detection is on')
             elif re.search('.*motion.*off.*', msg, re.IGNORECASE):
