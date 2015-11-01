@@ -9,6 +9,7 @@ import re
 import logging
 import time
 import own_util
+import secret
 
 from yowsup.layers                                      import YowLayerEvent
 from yowsup.layers.network                              import YowNetworkLayer
@@ -190,7 +191,7 @@ class SendReceiveLayer(YowInterfaceLayer):
 
 
 def credentials():
-    return "31629394299","yYwuot1XujZzhHYT6AcTbwzDvMw=" # Put your credentials here!
+    return secret.WhatsAppLogin,secret.WhatsAppPassword  # Put your credentials here!
 
 
 def whatsAppClient():
@@ -223,9 +224,9 @@ def whatsAppClient():
                 globWhatsAppMsgOutAvailable = False
                 globWhatsAppMsgOutAvailableLock.release()
                 if msgOutType == 'Image':
-                    messages = [(["31613484264", imgOut, msgOut])]
+                    messages = [([secret.WhatsAppTargetPhoneNumber, imgOut, msgOut])]
                 else:
-                    messages = [(["31613484264", '', msgOut])]
+                    messages = [([secret.WhatsAppTargetPhoneNumber, '', msgOut])]
                 stack.setProp(SendReceiveLayer.PROP_MESSAGES,messages)
                 stack.broadcastEvent(YowLayerEvent(SendReceiveLayer.EVENT_SEND_MESSAGE))
             else:
