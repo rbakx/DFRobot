@@ -179,7 +179,7 @@ def getUptime():
     # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
     expr = re.compile('.*up ([^,]+).*', re.DOTALL)
     m = expr.match(stdOutAndErr)
-    if m != None:
+    if m is not None:
         return m.group(1)
     else:
         return 'unknown'
@@ -216,7 +216,7 @@ def uploadAndPurge(filepath, nrOfFilesToKeep):
     idList = expr.findall(stdOutAndErr)
     # Now idList is a list containing the Id's of all file versions.
     # The last Id in the list is the oldest.
-    if idList != None:
+    if idList is not None:
         logging.getLogger("MyLog").info('uploadAndPurge: ' + str(len(idList) - 1) + ' versions of ' + filename + ' found on Google Drive')
         # Iterate backwards through the list, starting with the oldest file
         # until there are nrOfFilesToKeep files left.

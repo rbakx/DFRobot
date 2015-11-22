@@ -14,6 +14,7 @@ import logging
 from logging import Formatter
 from logging.handlers import RotatingFileHandler
 import communication
+import personal_assistant
 import own_util
 
 # General constants.
@@ -575,6 +576,9 @@ communication.sendWhatsAppMsg('I am up and running!')
 
 # Start Socket client.
 communication.startSocketClient()
+
+# Start personal assistant.
+personal_assistant.startPersonalAssistant()
 
 streamStarted = False
 modePrevious = ''

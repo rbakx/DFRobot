@@ -46,3 +46,4 @@ start_x=1
 gpu_mem=128
 
 dtparam=i2c=on,i2c_baudrate=32000
+disable_audio_dither=1
