@@ -246,8 +246,8 @@ def whatsAppClient():
 
             # Handle messages.
             msg = receiveWhatsAppMsg()
-            if re.search('.*robbie.*', msg, re.IGNORECASE):
-                pattern = re.compile("robbie ", re.IGNORECASE)
+            if re.search('.*james.*', msg, re.IGNORECASE):
+                pattern = re.compile("james ", re.IGNORECASE)
                 queryStr = pattern.sub("", msg)
                 response = personal_assistant.query(queryStr)
                 sendWhatsAppMsg(response)
