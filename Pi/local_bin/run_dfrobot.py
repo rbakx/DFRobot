@@ -99,7 +99,7 @@ def homeRun():
     # Start with cam down.
     own_util.moveCamAbs(0, 0.1)
 
-    while globContinueCapture == True and communication.globDoHomeRun == True:
+    while globContinueCapture == True and (communication.globDoHomeRun == True or personal_assistant.globDoHomeRun == True):
         # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
@@ -320,6 +320,7 @@ def homeRun():
     # Stop the getNewImage thread and indicate Home run is finished.
     globContinueCapture = False
     communication.globDoHomeRun = False
+    personal_assistant.globDoHomeRun = False
     # Convert the Home run images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
     globMyLog.info(stdOutAndErr)
@@ -350,7 +351,7 @@ def captureAndMotionDetection():
 
     logCount = 0
     while globContinueCapture == True:
-        if communication.globInteractive == True:
+        if communication.globInteractive == True or personal_assistant.globInteractive == True:
             if doPrint:
                 print 'stopping capture and motion detection because the interactive mode is active'
             globMyLog.info('stopping capture and motion detection because the interactive mode is active')
@@ -589,7 +590,7 @@ while True:
         # like the socketClient thread will not run at regular times.
         time.sleep(0.001)
         
-        if communication.globInteractive == True:
+        if communication.globInteractive == True or personal_assistant.globInteractive == True:
             # Intearctive mode
             if modePrevious != 'INTERACTIVE':
                 if doPrint:
@@ -597,7 +598,10 @@ while True:
                 globMyLog.info('going to start interactive mode')
                 modePrevious = 'INTERACTIVE'
             expr = re.compile('(.+?)(?:$| )')
-            cmdList = expr.findall(communication.globCmd)
+            if communication.globInteractive == True:
+                cmdList = expr.findall(communication.globCmd)
+            else:
+                cmdList = expr.findall(personal_assistant.globCmd)
             # Now cmdList is a a list containing the cmd and its parameters. The cmdList[0] contains the command.
             # If there are no parameters len(cmdList) == 1.
             if len(cmdList) > 0:
@@ -612,7 +616,7 @@ while True:
                         print 'going to start hq stream'
                     time.sleep(0.5)
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsHq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
-                if cmdList[0] == 'start-stream-lq':
+                elif cmdList[0] == 'start-stream-lq':
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start lq stream')
@@ -620,19 +624,19 @@ while True:
                         print 'going to start lq stream'
                     time.sleep(0.5)
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
-                if cmdList[0] == 'stop-stream':
+                elif cmdList[0] == 'stop-stream':
                     # Stop stream. Use sudo because stream can be started by another user.
                     globMyLog.info('going to stop stream')
                     if doPrint:
                         print 'going to stop stream'
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
-                if cmdList[0] == 'capture-start':
+                elif cmdList[0] == 'capture-start':
                     # Start capture video from http stream, with timeout of 60 seconds.
                     globMyLog.info('going to start capture http MJPEG stream')
                     if doPrint:
                         print 'going to start capture http MJPEG stream'
                     own_util.runShellCommandNowait('cvlc http://localhost:44445/?action=stream --sout \'#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}\' --run-time=60 vlc://quit')
-                if cmdList[0] == 'capture-stop':
+                elif cmdList[0] == 'capture-stop':
                     # Stop capture video from http stream.
                     globMyLog.info('going to stop capture http MJPEG stream')
                     if doPrint:
@@ -642,7 +646,7 @@ while True:
                     own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4', NofHomeRunVideosToKeep)
                     own_util.uploadAndPurge(logFilePath, 1)
                 elif cmdList[0] == 'home-start':
-                    # Home run
+                    # Home run.
                     globMyLog.info('going to start Home run')
                     if doPrint:
                         print 'Going to start Home run'
@@ -657,9 +661,6 @@ while True:
                     # Upload and purge the video file and log file.
                     own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
                     own_util.uploadAndPurge(logFilePath, 1)
-        
-                    # Home run is finished, switch back to default run.
-                    communication.globDoHomeRun = False
 
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
                     own_util.move(cmdList[0], cmdList[1], 0, doMove)
@@ -669,10 +670,28 @@ while True:
                     own_util.switchLight(True)
                 elif cmdList[0] == 'light-off':
                     own_util.switchLight(False)
+                elif cmdList[0] == 'demo-start':
+                    own_util.move('forward', 200, 1.0, doMove)
+                    own_util.move('forward', 200, 1.0, doMove)
+                    own_util.move('left', 160, 1.0, doMove)
+                    own_util.move('forward', 200, 1.0, doMove)
+                    # Demo Home run, no upload of video.
+                    globMyLog.info('going to start Home run')
+                    if doPrint:
+                        print 'Going to start Home run'
+                    # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                    globMyLog.info('going to start stream')
+                    time.sleep(0.5)
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Delay to give stream time to start up and camera to stabilize.
+                    time.sleep(5)
+                    homeRun()
 
                 # Command handled, so make empty.
                 communication.globCmd = ''
-
+                personal_assistant.globCmd = ''
+    
         else:
             # Default run mode
             if modePrevious != 'DEFAULTRUN':

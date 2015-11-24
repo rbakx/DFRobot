@@ -10,6 +10,12 @@ import personal_assistant
 import secret
 
 
+# Global variables
+globInteractive = False
+globDoHomeRun = False
+globCmd = ''
+
+
 class Queue:
     """A sample implementation of a First-In-First-Out
         data structure."""
@@ -90,7 +96,7 @@ class Queue:
             tot += self.ordered[i]
         return tot/5.0
 
-def waitForSound():
+def waitForTriggerSound():
     # Open the device in nonblocking capture mode. The last argument could
     # just as well have been zero for blocking mode. Then we could have
     # left out the sleep call in the bottom of the loop
@@ -241,24 +247,50 @@ def query(queryStr):
 
 
 def personalAssistant():
+    global globInteractive, globDoHomeRun, globCmd
     switchOnLoudspeaker()
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
     switchOffLoudspeaker()
     while True:
         try:
-            waitForSound()
+            tmpCmd = ''
+            # Wait for the trigger sound. This contains a sleep to enable other threads to run.
+            waitForTriggerSound()
             switchOnLoudspeaker()
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
 
             text = speechToText()
             logging.getLogger("MyLog").info('speecht to text: ' + text)
             if text != "":
-                response = query(text)
+                if text == 'lights on please':
+                    tmpCmd = 'light-on'
+                    response = 'lights on'
+                elif text == 'lights off please':
+                    tmpCmd = 'light-off'
+                    response = 'lights off'
+                elif text == 'demo start please':
+                    tmpCmd = 'demo-start'
+                    response = 'demo activated'
+                    globDoHomeRun = True
+                elif text == 'demo stop please':
+                    response = 'demo stopped'
+                    tmpCmd = 'demo-stop'
+                    globDoHomeRun = False
+                else:
+                    response = query(text)
             else:
                 response = "Sorry, I do not understand the question"
             logging.getLogger("MyLog").info('response: ' + response)
             textToSpeech(response)
             switchOffLoudspeaker()
+            # Now we activate the interactive command, after the speech response is generated.
+            if tmpCmd != '':
+                globCmd = tmpCmd
+                # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
+                globInteractive = True
+                # Sleep to give server time to start the command. Then set globInteractive to False again.
+                time.sleep(1.0)
+                globInteractive = False
         except Exception,e:
             logging.getLogger("MyLog").info('personalAssistant exception: ' + str(e))
 
