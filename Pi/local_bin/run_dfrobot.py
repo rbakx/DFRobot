@@ -48,6 +48,7 @@ NofHomeRunVideosToKeep = 3
 
 # Global variables.
 globMyLog = None
+globBrightness = 0
 
 # Initialization.
 doPrint = False
@@ -69,6 +70,12 @@ def getNewImage():
             globBytes= globBytes[b+2:]
             
             img = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8),cv2.CV_LOAD_IMAGE_COLOR)
+            # Get average brightness of hsv image by averaging the 'v' (value or brightness) bytes.
+            img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            totalPixel = cv2.sumElems(img_hsv)
+            globBrightness = totalPixel[2] / (ImgWidth * ImgHeight)
+            if doPrint:
+                print 'brightness:', globBrightness
             # Keep critical section as short as possible.
             globNewImageAvailableLock.acquire()
             globImg = img
@@ -80,6 +87,7 @@ def getNewImage():
 
 def homeRun():
     global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
+    global globBrightness
     
     globStream=urllib.urlopen('http://@localhost:44445/?action=stream')
     globBytes=''
@@ -98,6 +106,9 @@ def homeRun():
     
     # Start with cam down.
     own_util.moveCamAbs(0, 0.1)
+    # Switch on light if needed
+    if globBrightness < 100:
+        own_util.switchLight(True)
 
     while globContinueCapture == True and (communication.globDoHomeRun == True or personal_assistant.globDoHomeRun == True):
         # Keep critical section as short as possible.
@@ -107,13 +118,6 @@ def homeRun():
             img = globImg
             globNewImageAvailableLock.release()
             img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
-            img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-            
-            # Get average brightness of hsv image by averaging the 'v' (value or brightness) bytes.
-            totalPixel = cv2.sumElems(img_hsv)
-            avgBrightness = totalPixel[2] / (ImgWidth * ImgHeight)
-            if doPrint:
-                print 'brightness:', avgBrightness
 
             # Setup SimpleBlobDetector parameters.
             params = cv2.SimpleBlobDetector_Params()
@@ -671,6 +675,9 @@ while True:
                 elif cmdList[0] == 'light-off':
                     own_util.switchLight(False)
                 elif cmdList[0] == 'demo-start':
+                    # Switch on light if needed
+                    if globBrightness < 100:
+                        own_util.switchLight(True)
                     own_util.move('forward', 200, 1.0, doMove)
                     own_util.move('forward', 200, 1.0, doMove)
                     own_util.move('left', 160, 1.0, doMove)

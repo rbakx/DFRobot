@@ -41,7 +41,7 @@ class Queue:
             item = self.pop()
             self.ordered.append(item)
             self.push(item)
-        
+    
         if self.debug:
             i = 0
             for k in self.ordered:
@@ -55,16 +55,6 @@ class Queue:
                     sys.stdout.write('#')
                 print ""
                 i=i+1
-
-    def totalAvg(self):
-        tot = 0
-        for el in self.in_stack:
-            tot += el
-
-        for el in self.out_stack:
-            tot += el
-            
-        return float(tot) / (len(self.in_stack) + len(self.out_stack))
 
     def firstAvg(self):
         tot = 0
@@ -96,85 +86,104 @@ class Queue:
             tot += self.ordered[i]
         return tot/5.0
 
+
+def checkClaps(v1, v2, v3, v4, v5):
+    thresh = 5.0
+    if v2 / v1 > thresh and v2 / v3 > thresh and v4 / v3 > thresh and v4 / v5 > thresh:
+        return True
+    else:
+        return False
+
+
+def checkSilence(v1, v2, v3, v4, v5):
+    thresh = 2.0
+    avg = (v1 + v2 + v3 + v4 + v5) / 5.0
+    if abs(v1 - avg) / min(v1, avg) < thresh and abs(v2 - avg) / min(v2, avg) < thresh and abs(v3 - avg) / min(v3, avg) < thresh and abs(v4 - avg) / min(v4, avg) < thresh and abs(v5 - avg) / min(v5, avg) < thresh:
+        return True
+    else:
+        return False
+
+
 def waitForTriggerSound():
-    # Open the device in nonblocking capture mode. The last argument could
-    # just as well have been zero for blocking mode. Then we could have
-    # left out the sleep call in the bottom of the loop
+    # Open the device in blocking capture mode. During the blocking other threads can run.
     card = 'sysdefault:CARD=AK5370'
-    inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NONBLOCK, card)
+    inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NORMAL, card)
     
-    # Set attributes: Mono, 8000 Hz, 16 bit little endian samples
+    # Set attributes: Mono, 16000 Hz, 16 bit little endian samples
     inp.setchannels(1)
     inp.setrate(16000)
     inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
     
-    # The period size controls the internal number of frames per period.
+    # The period size controls the internal number of samples per period.
     # The significance of this parameter is documented in the ALSA api.
     # For our purposes, it is suficcient to know that reads from the device
-    # will return this many frames. Each frame being 2 bytes long.
-    # This means that the reads below will return either 320 bytes of data
-    # or 0 bytes of data. The latter is possible because we are in nonblocking
-    # mode.
+    # will return this many periods. Each sample being 2 bytes long.
     inp.setperiodsize(160)
-    
-    last = 0
-    max = 0
-    clapped = False
-    out = False
-    
+
     queue = Queue();
-    avgQueue = Queue();
     
     n = 0;
-    n2=0;
-    doContinue = True
-    while doContinue:
+    doContinue1 = True
+    doContinue2 = True
+    silenceCount = 0
+    while doContinue1 or doContinue2:
         # Read data from device
         l,data = inp.read()
         if l:
+            # 160 samples read = 10 msec = 1 period.
             err = False
             volume = -1
             try:
                 volume = audioop.max(data, 2)
-            except:
-                #print "err";
+            except Exception,e:
+                logging.getLogger("MyLog").info('personal assistant exception: ' + str(e))
                 err = True
             if err: continue
             
+            # Insert next period in queue.
             queue.push(volume)
-            avgQueue.push(volume)
             n = n + 1
-            n2 = n2 + 1
-            if n2 > 500:
-                avgQueue.pop()
-        
-            if n > queue.size:
-                avg = avgQueue.totalAvg()
-                #print "avg last fragments: " + str(avg)
-                
-                low_limit = avg + 10
-                #high_limit = avg + 30
-                high_limit = avg + 300
-                
+            
+            if n > queue.size:  # If queue is filled proceed with analyzing the sound.
+                # 35 periods = 350 msec = 1 frame.
+
                 queue.pop();
                 queue.makeOrdered();
-                v1 = queue.firstAvg();
-                v2 = queue.secondAvg();
-                v3 = queue.thirdAvg();
-                v4 = queue.fourthAvg();
-                v5 = queue.fifthAvg();
-                #if v1 < low_limit: print str(n)+": v1 ok"                 #if v2 > high_limit: print str(n)+": v2 ok"
-                #if v3 < low_limit: print str(n)+": v3 ok"                 #if v4 > high_limit: print str(n)+": v4 ok"
-                #if v5 < low_limit: print str(n)+": v5 ok"
+                v1 = queue.firstAvg();  # 50 ms
+                v2 = queue.secondAvg(); # 100 ms
+                v3 = queue.thirdAvg();  # 50 ms
+                v4 = queue.fourthAvg(); # 100 ms
+                v5 = queue.fifthAvg();  # 50 ms
                 
-                if v1 < low_limit and v2 > high_limit and v3 < low_limit and v4 > high_limit and v5 < low_limit:
-                    #print str(time.time())+": sgaMED"
-                    out = not out
-                    queue.clear()
-                    n = 0
-                    doContinue = False
-
-        time.sleep(0.01)
+                # The code below will be executed every period = 160 samples = 10 ms.
+                # Five volumes v1..v5 are available of the last 350 ms (1 frame) divided in 5, 10, 5, 10, 5 ms respectively.
+                # We check if there is first a frame with silence, then a frame with two claps, then a frame with silence again.
+                if doContinue1:
+                    # Check if there is a frame of silence.
+                    if checkSilence(v1, v2, v3, v4, v5):
+                        # A silence is detected of queue.size periods = 1 frame.
+                        # Set the silenceCount to this value to reserve time for detecting two claps.
+                        silenceCount = queue.size
+                    elif silenceCount > 0:
+                        # There is no silence any more. So two claps have to occur in the next silenceCount periods.
+                        # As soon as this time is exceeded (silenceCount == 0) we have to wait for the next silence.
+                        if checkClaps(v1, v2, v3, v4, v5):
+                            # Two claps are detected. Start checking for silence again.
+                            # Clear the queue so it will be filled again with the next frame which should contain silence.
+                            queue.clear()
+                            n = 0
+                            doContinue1 = False
+                            # Set silenceCount to 0 to prevent jumping directly to detecting claps in case of a next iteration.
+                            silenceCount = 0
+                        silenceCount = max(silenceCount - 1, 0)
+                elif doContinue2:
+                    # Check if there is silence after the two claps.
+                    if checkSilence(v1, v2, v3, v4, v5):
+                        # Trigger sound detected! Return from this function.
+                        doContinue2 = False
+                    else:
+                        # Start over again.
+                        doContinue1 = True
 
 
 def initMicrophone():
@@ -262,17 +271,17 @@ def personalAssistant():
             text = speechToText()
             logging.getLogger("MyLog").info('speecht to text: ' + text)
             if text != "":
-                if text == 'lights on please':
+                if re.search('james lights on please', text, re.IGNORECASE):
                     tmpCmd = 'light-on'
                     response = 'lights on'
-                elif text == 'lights off please':
+                elif re.search('james lights off please', text, re.IGNORECASE):
                     tmpCmd = 'light-off'
                     response = 'lights off'
-                elif text == 'demo start please':
+                elif re.search('james demo please', text, re.IGNORECASE):
                     tmpCmd = 'demo-start'
                     response = 'demo activated'
                     globDoHomeRun = True
-                elif text == 'demo stop please':
+                elif re.search('james stop', text, re.IGNORECASE):
                     response = 'demo stopped'
                     tmpCmd = 'demo-stop'
                     globDoHomeRun = False
