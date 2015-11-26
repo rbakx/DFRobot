@@ -3,6 +3,7 @@ import thread
 import time
 import alsaaudio, audioop
 import wolframalpha
+import feedparser
 import re
 import logging
 import own_util
@@ -142,7 +143,7 @@ def waitForTriggerSound():
             
             # Insert next period in queue.
             queue.push(volume)
-            n = n + 1
+            n = min(n + 1, queue.size + 1)  # prevent n from growing too big and cause side effects.
             
             if n > queue.size:  # If queue is filled proceed with analyzing the sound.
                 # 35 periods = 350 msec = 1 frame.
@@ -211,9 +212,9 @@ def switchOffLoudspeaker():
 
 
 def speechToText():
-    stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -f cd -t wav | ffmpeg -loglevel panic -y -i - -ar 16000 -acodec flac file.flac')
+    stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -f cd -t wav | ffmpeg -loglevel panic -y -i - -ar 16000 -acodec flac /tmp/file.flac')
 
-    stdOutAndErr = own_util.runShellCommandWait('wget -q --post-file file.flac --header="Content-Type: audio/x-flac; rate=16000" -O - "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextApiKey + '"')
+    stdOutAndErr = own_util.runShellCommandWait('wget -q --post-file /tmp/file.flac --header="Content-Type: audio/x-flac; rate=16000" -O - "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextApiKey + '"')
     # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
     # The one with the highest confidence is listed first, so we filter out that one.
 
@@ -228,8 +229,8 @@ def speechToText():
     return text
 
 
-def textToSpeech(text):
-    stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=en-us&f=16khz_16bit_mono&src=' + text + '"')
+def textToSpeech(text, language, speed):
+    stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"')
 
 
 def query(queryStr):
@@ -242,7 +243,7 @@ def query(queryStr):
             response = pod.text
         else:
             response = "I have no answer for that"
-        # Encode uuencoded string to ASCII.
+        # WolframAlpha can return Unicode, so encode response to ASCII.
         response = response.encode('ascii', 'ignore')
         # Remove words between brackets and the brackets as this is less relevant information.
         regex = re.compile('\(.+?\)')
@@ -271,26 +272,58 @@ def personalAssistant():
             text = speechToText()
             logging.getLogger("MyLog").info('speecht to text: ' + text)
             if text != "":
-                if re.search('james lights on please', text, re.IGNORECASE):
+                if re.search('james lights on', text, re.IGNORECASE):
                     tmpCmd = 'light-on'
+                    language = 'en-us'
                     response = 'lights on'
-                elif re.search('james lights off please', text, re.IGNORECASE):
+                elif re.search('james lights off', text, re.IGNORECASE):
                     tmpCmd = 'light-off'
+                    language = 'en-us'
                     response = 'lights off'
-                elif re.search('james demo please', text, re.IGNORECASE):
+                elif re.search('james demo', text, re.IGNORECASE):
                     tmpCmd = 'demo-start'
+                    language = 'en-us'
                     response = 'demo activated'
                     globDoHomeRun = True
                 elif re.search('james stop', text, re.IGNORECASE):
-                    response = 'demo stopped'
                     tmpCmd = 'demo-stop'
+                    language = 'en-us'
+                    response = 'demo stopped'
                     globDoHomeRun = False
+                elif re.search('james news world', text, re.IGNORECASE):
+                    d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')
+                    response = ''
+                    for post in d.entries[:10]:  # Restrict to 10 entries.
+                        # feedparser can return Unicode strings, so convert to ASCII.
+                        response = response + '\n' + post.title.encode('ascii', 'ignore')
+                    language = 'nl-nl'
+                elif re.search('james news netherlands', text, re.IGNORECASE):
+                    d = feedparser.parse('http://www.ed.nl/cmlink/1.3280352')
+                    response = ''
+                    for post in d.entries[:10]:  # Restrict to 10 entries.
+                        # feedparser can return Unicode strings, so convert to ASCII.
+                        response = response + '\n' + post.title.encode('ascii', 'ignore')
+                    language = 'nl-nl'
+                elif re.search('james news local', text, re.IGNORECASE):
+                    d = feedparser.parse('http://www.ed.nl/cmlink/1.4419308')
+                    response = ''
+                    for post in d.entries[:1000]:  # Restrict to 10 entries.
+                        # feedparser can return Unicode strings, so convert to ASCII.
+                        response = response + '\n' + post.title.encode('ascii', 'ignore')
+                    language = 'nl-nl'
+                elif re.search('james weather', text, re.IGNORECASE):
+                    d = feedparser.parse('http://projects.knmi.nl/RSSread/rss_KNMIverwachtingen.php')
+                    response = d['entries'][0]['description']
+                    # feedparser can return Unicode strings, so convert to ASCII.
+                    response = response.encode('ascii', 'ignore')
+                    language = 'nl-nl'
                 else:
+                    language = 'en-us'
                     response = query(text)
             else:
                 response = "Sorry, I do not understand the question"
             logging.getLogger("MyLog").info('response: ' + response)
-            textToSpeech(response)
+            textToSpeech(response, language, '0')
             switchOffLoudspeaker()
             # Now we activate the interactive command, after the speech response is generated.
             if tmpCmd != '':
