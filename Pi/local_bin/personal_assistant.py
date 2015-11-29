@@ -1,10 +1,11 @@
 #!/usr/bin/python
 import thread
 import time
+import math
+import re
 import alsaaudio, audioop
 import wolframalpha
 import feedparser
-import re
 import logging
 import own_util
 import personal_assistant
@@ -17,173 +18,101 @@ globDoHomeRun = False
 globCmd = ''
 
 
-class Queue:
-    """A sample implementation of a First-In-First-Out
-        data structure."""
-    def __init__(self):
-        self.size = 35
-        self.in_stack = []
-        self.out_stack = []
-        self.ordered = []
-        self.debug = False
-    def push(self, obj):
-        self.in_stack.append(obj)
-    def pop(self):
-        if not self.out_stack:
-            while self.in_stack:
-                self.out_stack.append(self.in_stack.pop())
-        return self.out_stack.pop()
-    def clear(self):
-        self.in_stack = []
-        self.out_stack = []
-    def makeOrdered(self):
-        self.ordered = []
-        for i in range(self.size):
-            item = self.pop()
-            self.ordered.append(item)
-            self.push(item)
-    
-        if self.debug:
-            i = 0
-            for k in self.ordered:
-                if i == 0: print "-- v1 --"
-                if i == 5: print "-- v2 --"
-                if i == 15: print "-- v3 --"
-                if i == 20: print "-- v4 --"
-                if i == 25: print "-- v5 --"
-                
-                for h in range(int(k/3)):
-                    sys.stdout.write('#')
-                print ""
-                i=i+1
-
-    def firstAvg(self):
-        tot = 0
-        for i in range(5):
-            tot += self.ordered[i]
-        return tot/5.0
-
-    def secondAvg(self):
-        tot = 0
-        for i in range(5,15):
-            tot += self.ordered[i]
-        return tot/10.0
-
-    def thirdAvg(self):
-        tot = 0
-        for i in range(15,20):
-            tot += self.ordered[i]
-        return tot/5.0
-
-    def fourthAvg(self):
-        tot = 0
-        for i in range(20,30):
-            tot += self.ordered[i]
-        return tot/10.0
-
-    def fifthAvg(self):
-        tot = 0
-        for i in range(30,35):
-            tot += self.ordered[i]
-        return tot/5.0
-
-
-def checkClaps(v1, v2, v3, v4, v5):
-    thresh = 5.0
-    if v2 / v1 > thresh and v2 / v3 > thresh and v4 / v3 > thresh and v4 / v5 > thresh:
+def checkClaps(p1, p2, p3, p4, p5):
+    minClapRatio = 5.0
+    if p2 / p1 > minClapRatio and p2 / p3 > minClapRatio and p4 / p3 > minClapRatio and p4 / p5 > minClapRatio:
         return True
     else:
         return False
 
 
-def checkSilence(v1, v2, v3, v4, v5):
-    thresh = 2.0
-    avg = (v1 + v2 + v3 + v4 + v5) / 5.0
-    if abs(v1 - avg) / min(v1, avg) < thresh and abs(v2 - avg) / min(v2, avg) < thresh and abs(v3 - avg) / min(v3, avg) < thresh and abs(v4 - avg) / min(v4, avg) < thresh and abs(v5 - avg) / min(v5, avg) < thresh:
+def checkSilence(p1, p2, p3, p4, p5):
+    maxSilenceRatio = 3.0
+    SilenceThreshold = 10000000.0
+    avg = (p1 + p2 + p3 + p4 + p5) / 5.0
+    # First check for zero to prevent division by zero.
+    if (p1 == 0 or p2 == 0 or p3 == 0 or p4 == 0 or p5 == 0):
+        return False
+    # Silence is True when all powers are below SilenceThreshold or when all powers are about equal.
+    if (p1 < SilenceThreshold and p2 < SilenceThreshold and p3 < SilenceThreshold and p4 < SilenceThreshold and p5 < SilenceThreshold) or (abs(p1 - avg) / min(p1, avg) < maxSilenceRatio and abs(p2 - avg) / min(p2, avg) < maxSilenceRatio and abs(p3 - avg) / min(p3, avg) < maxSilenceRatio and abs(p4 - avg) / min(p4, avg) < maxSilenceRatio and abs(p5 - avg) / min(p5, avg) < maxSilenceRatio):
         return True
     else:
         return False
 
 
 def waitForTriggerSound():
+    # Constants used in this function.
+    SampleRate = 16000
+    PeriodSizeInSamples = 500
+    BytesPerSample = 2 # Corrsponding to the PCM_FORMAT_S16_LE setting.
+    PeriodSizeInBytes = PeriodSizeInSamples * BytesPerSample
+    FiveSegmentsSizeInBytes = 20000
+    SegmentSizeInBytes = 4000
+    ClapCountInPeriods = FiveSegmentsSizeInBytes / PeriodSizeInBytes
+    SilenceCountInPeriods = 2 * FiveSegmentsSizeInBytes / PeriodSizeInBytes  # the 2 because of echoes.
+    
     # Open the device in blocking capture mode. During the blocking other threads can run.
     card = 'sysdefault:CARD=AK5370'
     inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NORMAL, card)
     
-    # Set attributes: Mono, 16000 Hz, 16 bit little endian samples
+    # Set attributes: mono, SampleRate, 16 bit little endian samples
     inp.setchannels(1)
-    inp.setrate(16000)
+    inp.setrate(SampleRate)
     inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
     
-    # The period size controls the internal number of samples per period.
-    # The significance of this parameter is documented in the ALSA api.
-    # For our purposes, it is suficcient to know that reads from the device
-    # will return this many periods. Each sample being 2 bytes long.
-    inp.setperiodsize(160)
-
-    queue = Queue();
+    # The period size sets the period size in samples which is read every blocking read() call.
+    # However, currently this setting does not have to seem to have any effect and the period size
+    # effectively is always 341. This might be an alsaaudio bug.
+    # For the code below it does not really matter.
+    inp.setperiodsize(PeriodSizeInSamples)
     
-    n = 0;
     doContinue1 = True
     doContinue2 = True
+    clapCount = 0
     silenceCount = 0
+    audioBuffer = ""
     while doContinue1 or doContinue2:
-        # Read data from device
-        l,data = inp.read()
-        if l:
-            # 160 samples read = 10 msec = 1 period.
-            err = False
-            volume = -1
-            try:
-                volume = audioop.max(data, 2)
-            except Exception,e:
-                logging.getLogger("MyLog").info('personal assistant exception: ' + str(e))
-                err = True
-            if err: continue
-            
-            # Insert next period in queue.
-            queue.push(volume)
-            n = min(n + 1, queue.size + 1)  # prevent n from growing too big and cause side effects.
-            
-            if n > queue.size:  # If queue is filled proceed with analyzing the sound.
-                # 35 periods = 350 msec = 1 frame.
-
-                queue.pop();
-                queue.makeOrdered();
-                v1 = queue.firstAvg();  # 50 ms
-                v2 = queue.secondAvg(); # 100 ms
-                v3 = queue.thirdAvg();  # 50 ms
-                v4 = queue.fourthAvg(); # 100 ms
-                v5 = queue.fifthAvg();  # 50 ms
-                
-                # The code below will be executed every period = 160 samples = 10 ms.
-                # Five volumes v1..v5 are available of the last 350 ms (1 frame) divided in 5, 10, 5, 10, 5 ms respectively.
-                # We check if there is first a frame with silence, then a frame with two claps, then a frame with silence again.
-                if doContinue1:
-                    # Check if there is a frame of silence.
-                    if checkSilence(v1, v2, v3, v4, v5):
-                        # A silence is detected of queue.size periods = 1 frame.
-                        # Set the silenceCount to this value to reserve time for detecting two claps.
-                        silenceCount = queue.size
-                    elif silenceCount > 0:
-                        # There is no silence any more. So two claps have to occur in the next silenceCount periods.
-                        # As soon as this time is exceeded (silenceCount == 0) we have to wait for the next silence.
-                        if checkClaps(v1, v2, v3, v4, v5):
-                            # Two claps are detected. Start checking for silence again.
-                            # Clear the queue so it will be filled again with the next frame which should contain silence.
-                            queue.clear()
-                            n = 0
-                            doContinue1 = False
-                            # Set silenceCount to 0 to prevent jumping directly to detecting claps in case of a next iteration.
-                            silenceCount = 0
-                        silenceCount = max(silenceCount - 1, 0)
-                elif doContinue2:
-                    # Check if there is silence after the two claps.
-                    if checkSilence(v1, v2, v3, v4, v5):
-                        # Trigger sound detected! Return from this function.
-                        doContinue2 = False
-                    else:
-                        # Start over again.
+        # Read PeriodSizeInSamples audio samples from the audio input which is PeriodSizeInBytes bytes.
+        # newAudioData will be a sequence of audio samples, stored as a Python string.
+        l,newAudioData = inp.read()
+        audioBuffer = audioBuffer + newAudioData
+        if len(audioBuffer) >= FiveSegmentsSizeInBytes:
+            p1 = math.pow(audioop.rms(audioBuffer[0:1*SegmentSizeInBytes], BytesPerSample), 2)
+            p2 = math.pow(audioop.rms(audioBuffer[1*SegmentSizeInBytes:2*SegmentSizeInBytes], BytesPerSample), 2)
+            p3 = math.pow(audioop.rms(audioBuffer[2*SegmentSizeInBytes:3*SegmentSizeInBytes], BytesPerSample), 2)
+            p4 = math.pow(audioop.rms(audioBuffer[3*SegmentSizeInBytes:4*SegmentSizeInBytes], BytesPerSample), 2)
+            p5 = math.pow(audioop.rms(audioBuffer[4*SegmentSizeInBytes:5*SegmentSizeInBytes], BytesPerSample), 2)
+            audioBuffer = audioBuffer[PeriodSizeInBytes:]
+            # The code below will be executed every period or PeriodSizeInSamples samples.
+            # With 16 KHz sample rate this means every 31.25 ms.
+            # Five powers p1..p5 are available of the last 5 segments.
+            # We check if there are first 5 segments with silence, then 5 segments with two claps, then 5 segments with silence again.
+            if doContinue1:
+                # Check if there are 5 segments of silence.
+                if checkSilence(p1, p2, p3, p4, p5):
+                    # A silence is detected for 5 segments.
+                    # Set the clapCount to this value to reserve time for detecting two claps.
+                    clapCount = ClapCountInPeriods
+                elif clapCount > 0:
+                    # There is no silence any more. So two claps have to occur in the next clapCount periods.
+                    # As soon as this time is exceeded (clapCount == 0) we start over again.
+                    if checkClaps(p1, p2, p3, p4, p5):
+                        # Two claps are detected. Start checking for silence again.
+                        silenceCount = SilenceCountInPeriods;
+                        n = 0
+                        doContinue1 = False
+                        # Set clapCount to 0 to prevent jumping directly to detecting claps in case of a next iteration.
+                        clapCount = 0
+                    clapCount = max(clapCount - 1, 0)
+            elif doContinue2:
+                # Check if there is silence after the two claps.
+                if checkSilence(p1, p2, p3, p4, p5):
+                    # Trigger sound detected! Return from this function.
+                    doContinue2 = False
+                else:
+                    silenceCount = max(silenceCount - 1, 0)
+                    if silenceCount == 0:
+                        # No silence detected in tome, so start over again.
                         doContinue1 = True
 
 
@@ -201,6 +130,11 @@ def initMicrophone():
 def initLoudspeaker():
     # Set maximum playback volume on 3 mm headphones jack.
     stdOutAndErr = own_util.runShellCommandWait('amixer set PCM -- 100%')
+
+
+def setVolumeLoudspeaker(volume):
+    # Set maximum playback volume on 3 mm headphones jack.
+    stdOutAndErr = own_util.runShellCommandWait('amixer set PCM -- ' + volume)
 
 
 def switchOnLoudspeaker():
@@ -230,7 +164,9 @@ def speechToText():
 
 
 def textToSpeech(text, language, speed):
-    stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"')
+    # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
+    # When speech is finished the loudspeaker is turned off.
+    own_util.runShellCommandNowait('/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"' + ';sudo /usr/local/bin/own_gpio.py --loudspeaker off')
 
 
 def query(queryStr):
@@ -266,11 +202,25 @@ def personalAssistant():
             tmpCmd = ''
             # Wait for the trigger sound. This contains a sleep to enable other threads to run.
             waitForTriggerSound()
+            # Check if the previous command is still running. If so, kill it and continue waiting for the next trigger sound.
+            # This way it is possible to start a command with two claps and also stop a running command with two claps.
+            stdOutAndErr = own_util.runShellCommandWait('sudo killall mplayer')
+            if stdOutAndErr == "":
+                switchOffLoudspeaker()
+                continue
+            stdOutAndErr = own_util.runShellCommandWait('mpc current')
+            if stdOutAndErr != "" and 'error' not in stdOutAndErr:
+                # Stop playing music and stop Music Player Daemon service.
+                stdOutAndErr = own_util.runShellCommandWait('mpc stop;mpc clear;sudo service mpd stop')
+                switchOffLoudspeaker()
+                continue
             switchOnLoudspeaker()
+            setVolumeLoudspeaker('100%')  # default volume
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
 
             text = speechToText()
             logging.getLogger("MyLog").info('speecht to text: ' + text)
+            response = ''
             if text != "":
                 if re.search('james lights on', text, re.IGNORECASE):
                     tmpCmd = 'light-on'
@@ -290,7 +240,7 @@ def personalAssistant():
                     language = 'en-us'
                     response = 'demo stopped'
                     globDoHomeRun = False
-                elif re.search('james news world', text, re.IGNORECASE):
+                elif re.search('james news', text, re.IGNORECASE):
                     d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')
                     response = ''
                     for post in d.entries[:10]:  # Restrict to 10 entries.
@@ -317,22 +267,28 @@ def personalAssistant():
                     # feedparser can return Unicode strings, so convert to ASCII.
                     response = response.encode('ascii', 'ignore')
                     language = 'nl-nl'
+                elif re.search('james radio', text, re.IGNORECASE):
+                    # Start Music Player Daemon service and play music.
+                    station = 'http://50.7.56.2:8020'
+                    setVolumeLoudspeaker('70%')
+                    stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
                 else:
                     language = 'en-us'
                     response = query(text)
             else:
+                language = 'en-us'
                 response = "Sorry, I do not understand the question"
-            logging.getLogger("MyLog").info('response: ' + response)
-            textToSpeech(response, language, '0')
-            switchOffLoudspeaker()
-            # Now we activate the interactive command, after the speech response is generated.
-            if tmpCmd != '':
-                globCmd = tmpCmd
-                # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
-                globInteractive = True
-                # Sleep to give server time to start the command. Then set globInteractive to False again.
-                time.sleep(1.0)
-                globInteractive = False
+            if response != '':
+                logging.getLogger("MyLog").info('response: ' + response)
+                textToSpeech(response, language, '0')
+                # Now we activate the interactive command, after the speech response is generated.
+                if tmpCmd != '':
+                    globCmd = tmpCmd
+                    # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
+                    globInteractive = True
+                    # Sleep to give server time to start the command. Then set globInteractive to False again.
+                    time.sleep(1.0)
+                    globInteractive = False
         except Exception,e:
             logging.getLogger("MyLog").info('personalAssistant exception: ' + str(e))
 
