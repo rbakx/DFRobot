@@ -197,8 +197,11 @@ def personalAssistant():
     switchOnLoudspeaker()
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
     switchOffLoudspeaker()
+    volumeDefaultStr = '100%'  # default volume
+    volumeVariableStr = '100%'  # variable volume
     while True:
         try:
+            language = 'en-us' # default language
             tmpCmd = ''
             # Wait for the trigger sound. This contains a sleep to enable other threads to run.
             waitForTriggerSound()
@@ -214,30 +217,38 @@ def personalAssistant():
                 stdOutAndErr = own_util.runShellCommandWait('mpc stop;mpc clear;sudo service mpd stop')
                 switchOffLoudspeaker()
                 continue
+            setVolumeLoudspeaker(volumeDefaultStr)
             switchOnLoudspeaker()
-            setVolumeLoudspeaker('100%')  # default volume
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
 
             text = speechToText()
             logging.getLogger("MyLog").info('speecht to text: ' + text)
             response = ''
             if text != "":
-                if re.search('james lights on', text, re.IGNORECASE):
+                if re.search('james (?:volume|vol) (.*)', text, re.IGNORECASE):
+                    m = re.search('james (?:volume|vol) (.*)', text, re.IGNORECASE)
+                    volStr = m.group(1)
+                    if volStr.isdigit():
+                        vol = int(volStr)
+                        if vol >= 0 and vol <= 10:
+                            volumeVariableStr = str(vol * 10) + '%'
+                        else:
+                            volStr = 'not valid'  # Volume not valid.
+                    else:
+                        volStr = 'not valid'  # Volume not valid.
+                    response = 'volume ' + volStr
+                elif re.search('james lights on', text, re.IGNORECASE):
                     tmpCmd = 'light-on'
-                    language = 'en-us'
                     response = 'lights on'
                 elif re.search('james lights off', text, re.IGNORECASE):
                     tmpCmd = 'light-off'
-                    language = 'en-us'
                     response = 'lights off'
                 elif re.search('james demo', text, re.IGNORECASE):
                     tmpCmd = 'demo-start'
-                    language = 'en-us'
                     response = 'demo activated'
                     globDoHomeRun = True
                 elif re.search('james stop', text, re.IGNORECASE):
                     tmpCmd = 'demo-stop'
-                    language = 'en-us'
                     response = 'demo stopped'
                     globDoHomeRun = False
                 elif re.search('james news', text, re.IGNORECASE):
@@ -267,19 +278,28 @@ def personalAssistant():
                     # feedparser can return Unicode strings, so convert to ASCII.
                     response = response.encode('ascii', 'ignore')
                     language = 'nl-nl'
-                elif re.search('james radio', text, re.IGNORECASE):
+                elif re.search('james radio hits', text, re.IGNORECASE):
+                    # Start Music Player Daemon service and play music.
+                    station = 'http://87.118.122.45:30710'
+                    setVolumeLoudspeaker(volumeVariableStr)
+                    stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
+                elif re.search('james radio latin', text, re.IGNORECASE):
                     # Start Music Player Daemon service and play music.
                     station = 'http://50.7.56.2:8020'
-                    setVolumeLoudspeaker('70%')
+                    setVolumeLoudspeaker(volumeVariableStr)
+                    stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
+                elif re.search('james radio christmas', text, re.IGNORECASE):
+                    # Start Music Player Daemon service and play music.
+                    station = 'http://108.61.73.117:8124'
+                    setVolumeLoudspeaker(volumeVariableStr)
                     stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
                 else:
-                    language = 'en-us'
                     response = query(text)
             else:
-                language = 'en-us'
                 response = "Sorry, I do not understand the question"
             if response != '':
                 logging.getLogger("MyLog").info('response: ' + response)
+                setVolumeLoudspeaker(volumeDefaultStr)
                 textToSpeech(response, language, '0')
                 # Now we activate the interactive command, after the speech response is generated.
                 if tmpCmd != '':
