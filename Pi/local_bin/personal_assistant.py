@@ -3,6 +3,7 @@ import thread
 import time
 import math
 import re
+import datetime
 import alsaaudio, audioop
 import wolframalpha
 import feedparser
@@ -40,7 +41,9 @@ def checkSilence(p1, p2, p3, p4, p5):
         return False
 
 
-def waitForTriggerSound():
+# This function waits for an event like the trigger sound or alarm and returns when the event has occurred.
+def waitForEvent():
+    global globAlarmStatus, globAlarm
     # Constants used in this function.
     SampleRate = 16000
     PeriodSizeInSamples = 500
@@ -72,6 +75,12 @@ def waitForTriggerSound():
     silenceCount = 0
     audioBuffer = ""
     while doContinue1 or doContinue2:
+        # Check for Alarm event.
+        if globAlarmStatus == 'SET' and datetime.datetime.now().time() > datetime.time(globAlarm[0], globAlarm[1]):
+            # Indicate alarm and return.
+            globAlarmStatus = 'ALARMSET'
+            return
+        
         # Read PeriodSizeInSamples audio samples from the audio input which is PeriodSizeInBytes bytes.
         # newAudioData will be a sequence of audio samples, stored as a Python string.
         l,newAudioData = inp.read()
@@ -194,112 +203,154 @@ def query(queryStr):
 
 def personalAssistant():
     global globInteractive, globDoHomeRun, globCmd
+    global globAlarmStatus, globAlarm
     switchOnLoudspeaker()
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
     switchOffLoudspeaker()
-    volumeDefaultStr = '100%'  # default volume
-    volumeVariableStr = '100%'  # variable volume
+    volumeVoice = '100%' # Volume used for voice responses.
+    volumeMusic = '70%'  # Volume used for music.
+    globAlarmStatus = ''
     while True:
         try:
             language = 'en-us' # default language
             tmpCmd = ''
-            # Wait for the trigger sound. This contains a sleep to enable other threads to run.
-            waitForTriggerSound()
+            # Wait for an event like the trigger sound or alarm. This contains a sleep to enable other threads to run.
+            waitForEvent()
             # Check if the previous command is still running. If so, kill it and continue waiting for the next trigger sound.
             # This way it is possible to start a command with two claps and also stop a running command with two claps.
             stdOutAndErr = own_util.runShellCommandWait('sudo killall mplayer')
+            actionInterrupted = False
             if stdOutAndErr == "":
                 switchOffLoudspeaker()
-                continue
+                actionInterrupted = True  # Indicate the action was interrupted by an event.
             stdOutAndErr = own_util.runShellCommandWait('mpc current')
             if stdOutAndErr != "" and 'error' not in stdOutAndErr:
                 # Stop playing music and stop Music Player Daemon service.
                 stdOutAndErr = own_util.runShellCommandWait('mpc stop;mpc clear;sudo service mpd stop')
                 switchOffLoudspeaker()
+                actionInterrupted = True  # Indicate the action was interrupted by an event.
+            if globAlarmStatus == 'ALARMSET':
+                # Switch on loadspeaker, sound the alarm and switch off loudspeaker.
+                setVolumeLoudspeaker(volumeVoice)
+                switchOnLoudspeaker()
+                stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/alarm.mp3')
+                switchOffLoudspeaker()
+                globAlarmStatus = ''  # reset alarm
+                actionInterrupted = True  # Indicate the action was interrupted by an event.
+            # If an action was interrupted by an event, the action is stopped and we continue to wait for the next event.
+            if actionInterrupted == True:
                 continue
-            setVolumeLoudspeaker(volumeDefaultStr)
+            # Speak out greeting.
+            setVolumeLoudspeaker(volumeVoice)
             switchOnLoudspeaker()
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
 
+            # Listen and translate speech to text.
             text = speechToText()
             logging.getLogger("MyLog").info('speecht to text: ' + text)
             response = ''
-            if text != "":
-                if re.search('james (?:volume|vol) (.*)', text, re.IGNORECASE):
-                    m = re.search('james (?:volume|vol) (.*)', text, re.IGNORECASE)
-                    volStr = m.group(1)
-                    if volStr.isdigit():
-                        vol = int(volStr)
-                        if vol >= 0 and vol <= 10:
-                            volumeVariableStr = str(vol * 10) + '%'
+            # All voice commands have to start with 'James'.
+            m = re.search('james (.*)', text, re.IGNORECASE)
+            if m and m.group(1) and m.group(1) != "":  # be safe
+                text = m.group(1)
+                # 'text' now containes the voice command without 'James'.
+                # Handle the voice command.
+                if re.search('(?:volume|vol).*', text, re.IGNORECASE):
+                    m = re.search('(?:volume|vol) (.*)', text, re.IGNORECASE)
+                    if m and m.group(1) and m.group(1) != "":  # be safe
+                        volStr = m.group(1)
+                        if volStr.isdigit():
+                            vol = int(volStr)
+                            if vol >= 0 and vol <= 10:
+                                volumeMusic = str(vol * 10) + '%'
+                                response = 'volume ' + volStr
+                            else:
+                                response = 'volume not valid'
                         else:
-                            volStr = 'not valid'  # Volume not valid.
+                            response = 'volume not valid'
                     else:
-                        volStr = 'not valid'  # Volume not valid.
-                    response = 'volume ' + volStr
-                elif re.search('james lights on', text, re.IGNORECASE):
+                        response = 'volume not valid'
+                elif re.search('alarm at.*', text, re.IGNORECASE):
+                    m = re.search('alarm at ([0-9]{1,2}(:?:| )[0-9]{1,2})', text, re.IGNORECASE)
+                    if m and m.group(1) and m.group(1) != "":  # be safe
+                        alarmString = m.group(1)
+                        # Use re.split because this supports multiple delimiters.
+                        t = re.split(':| ', alarmString)  # string tuple
+                        globAlarm = (int(t[0]), int(t[1]))  # integer tuple
+                        globAlarmStatus = 'SET'
+                        response = 'alarm set at ' + m.group(1)
+                    else:
+                        globAlarmStatus = ''  # Set off any previous alarm.
+                        response = 'alarm not valid'
+                elif re.search('alarm$', text, re.IGNORECASE):
+                    if globAlarmStatus == 'SET':
+                        response = 'alarm set at ' + alarmString
+                    else:
+                        response = 'alarm not set'
+                elif re.search('lights on$', text, re.IGNORECASE):
                     tmpCmd = 'light-on'
                     response = 'lights on'
-                elif re.search('james lights off', text, re.IGNORECASE):
+                elif re.search('lights off$', text, re.IGNORECASE):
                     tmpCmd = 'light-off'
                     response = 'lights off'
-                elif re.search('james demo', text, re.IGNORECASE):
+                elif re.search('demo$', text, re.IGNORECASE):
                     tmpCmd = 'demo-start'
                     response = 'demo activated'
                     globDoHomeRun = True
-                elif re.search('james stop', text, re.IGNORECASE):
+                elif re.search('stop$', text, re.IGNORECASE):
                     tmpCmd = 'demo-stop'
                     response = 'demo stopped'
                     globDoHomeRun = False
-                elif re.search('james news', text, re.IGNORECASE):
+                elif re.search('news$', text, re.IGNORECASE):
                     d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')
                     response = ''
                     for post in d.entries[:10]:  # Restrict to 10 entries.
                         # feedparser can return Unicode strings, so convert to ASCII.
                         response = response + '\n' + post.title.encode('ascii', 'ignore')
                     language = 'nl-nl'
-                elif re.search('james news netherlands', text, re.IGNORECASE):
+                elif re.search('news netherlands$', text, re.IGNORECASE):
                     d = feedparser.parse('http://www.ed.nl/cmlink/1.3280352')
                     response = ''
                     for post in d.entries[:10]:  # Restrict to 10 entries.
                         # feedparser can return Unicode strings, so convert to ASCII.
                         response = response + '\n' + post.title.encode('ascii', 'ignore')
                     language = 'nl-nl'
-                elif re.search('james news local', text, re.IGNORECASE):
+                elif re.search('news local$', text, re.IGNORECASE):
                     d = feedparser.parse('http://www.ed.nl/cmlink/1.4419308')
                     response = ''
                     for post in d.entries[:1000]:  # Restrict to 10 entries.
                         # feedparser can return Unicode strings, so convert to ASCII.
                         response = response + '\n' + post.title.encode('ascii', 'ignore')
                     language = 'nl-nl'
-                elif re.search('james weather', text, re.IGNORECASE):
+                elif re.search('weather$', text, re.IGNORECASE):
                     d = feedparser.parse('http://projects.knmi.nl/RSSread/rss_KNMIverwachtingen.php')
                     response = d['entries'][0]['description']
                     # feedparser can return Unicode strings, so convert to ASCII.
                     response = response.encode('ascii', 'ignore')
                     language = 'nl-nl'
-                elif re.search('james radio hits', text, re.IGNORECASE):
+                elif re.search('radio hits$', text, re.IGNORECASE):
                     # Start Music Player Daemon service and play music.
                     station = 'http://87.118.122.45:30710'
-                    setVolumeLoudspeaker(volumeVariableStr)
+                    setVolumeLoudspeaker(volumeMusic)
                     stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
-                elif re.search('james radio latin', text, re.IGNORECASE):
+                elif re.search('radio latin$', text, re.IGNORECASE):
                     # Start Music Player Daemon service and play music.
                     station = 'http://50.7.56.2:8020'
-                    setVolumeLoudspeaker(volumeVariableStr)
+                    setVolumeLoudspeaker(volumeMusic)
                     stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
-                elif re.search('james radio christmas', text, re.IGNORECASE):
+                elif re.search('radio christmas$', text, re.IGNORECASE):
                     # Start Music Player Daemon service and play music.
                     station = 'http://108.61.73.117:8124'
-                    setVolumeLoudspeaker(volumeVariableStr)
+                    setVolumeLoudspeaker(volumeMusic)
                     stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
                 else:
                     response = query(text)
             else:
-                response = "Sorry, I do not understand the question"
+                # Not a valid voice command.
+                stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/nocomprendo.mp3')
             if response != '':
                 logging.getLogger("MyLog").info('response: ' + response)
-                setVolumeLoudspeaker(volumeDefaultStr)
+                setVolumeLoudspeaker(volumeVoice)
                 textToSpeech(response, language, '0')
                 # Now we activate the interactive command, after the speech response is generated.
                 if tmpCmd != '':
