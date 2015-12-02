@@ -263,26 +263,20 @@ def personalAssistant():
                 # 'text' now containes the voice command without 'James'.
                 # Handle the voice command.
                 if re.search('(?:volume|vol).*', text, re.IGNORECASE):
-                    m = re.search('(?:volume|vol) (.*)', text, re.IGNORECASE)
+                    m = re.search('(?:volume|vol) ([0-9]|10)$', text, re.IGNORECASE)
                     if m and m.group(1) and m.group(1) != "":  # be safe
                         volStr = m.group(1)
-                        if volStr.isdigit():
-                            vol = int(volStr)
-                            if vol >= 0 and vol <= 10:
-                                volumeMusic = str(vol * 10) + '%'
-                                response = 'volume ' + volStr
-                            else:
-                                response = 'volume not valid'
-                        else:
-                            response = 'volume not valid'
+                        volumeMusic = str(int(volStr) * 10) + '%'
+                        response = 'volume ' + volStr
                     else:
                         response = 'volume not valid'
                 elif re.search('alarm at.*', text, re.IGNORECASE):
                     # Below the regular expression to deal with different time formats which the Speech To Text service can return.
-                    m = re.search('alarm at ([0-9](?:| )[0-9]{0,1})[^0-9]*([0-9](?:| )[0-9])$', text, re.IGNORECASE)
+                    # Formats that can be handled are like: '23:15', 'zero 0 7', '0:07', '0 0 7', 'zero3zero' etc.
+                    m = re.search('alarm at ((?:[0-9]|zero)(?:| )(?:[0-9]|zero){0,1})[^0-9]*((?:[0-9]|zero)(?:| )(?:[0-9]|zero))$', text, re.IGNORECASE)
                     if m and m.group(1) and m.group(2) and m.group(1) != "" and m.group(2) != "":  # be safe
-                        hours = m.group(1).replace(" ", "")  # remove spaces
-                        minutes = m.group(2).replace(" ", "")  # remove spaces
+                        hours = m.group(1).replace(" ", "").replace("zero", "0")  # Remove spaces and replace "zero" with "0".
+                        minutes = m.group(2).replace(" ", "").replace("zero", "0")  # Remove spaces and replace "zero" with "0".
                         # 'alarmString' will be a string like "11:15" or "0:07".
                         alarmString = hours + ":" + minutes
                         globAlarm = (int(hours), int(minutes))  # Integer tuple containing hours and minutes.

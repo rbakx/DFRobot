@@ -15,13 +15,16 @@ import i2c
 slaveAddressArduino = 0x04
 
 
+# runShellCommandWait(cmd) will block until 'cmd' is finished.
+# This because the communicate() method is used to communicate to interact with the process through the redirected pipes.
 def runShellCommandWait(cmd):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
 
 
-# Below do not use stdout=subprocess.PIPE, stderr=subprocess.STDOUT as this causes problems.
-# For example mplayer stops after a minute in this case.
-# Instead redirection of stdout and stderr to /dev/null is used.
+# runShellCommandNowait(cmd) will not block because the communicate() method is not used.
+# Therefore do not use 'stdout=subprocess.PIPE, stderr=subprocess.STDOUT' here as these pipes will not be read or written
+# which means the process can block after a while. This happens for example when running mplayer with runShellCommandNowait().
+# Therefore redirection of stdout and stderr to /dev/null is used.
 def runShellCommandNowait(cmd):
     subprocess.Popen(cmd + '>/dev/null 2>&1', shell=True)
 
