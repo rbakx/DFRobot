@@ -208,7 +208,8 @@ def personalAssistant():
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
     switchOffLoudspeaker()
     volumeVoice = '100%' # Volume used for voice responses.
-    volumeMusic = '70%'  # Volume used for music.
+    volumeAlarm = '85%'  # Volume used for alarm.
+    volumeMusic = '70%'  # Volume used for music, can be set by voice command.
     globAlarmStatus = ''
     while True:
         try:
@@ -216,29 +217,35 @@ def personalAssistant():
             tmpCmd = ''
             # Wait for an event like the trigger sound or alarm. This contains a sleep to enable other threads to run.
             waitForEvent()
+            # Event occurred. An event can be for example two claps to request a servie, two claps to interrupt an action or an alarm.
+            # 'eventHandled' is used to check whether the event is handled or not.
+            eventHandled = False
             # Check if the previous command is still running. If so, kill it and continue waiting for the next trigger sound.
             # This way it is possible to start a command with two claps and also stop a running command with two claps.
             stdOutAndErr = own_util.runShellCommandWait('sudo killall mplayer')
-            actionInterrupted = False
             if stdOutAndErr == "":
                 switchOffLoudspeaker()
-                actionInterrupted = True  # Indicate the action was interrupted by an event.
+                eventHandled = True  # Indicate the event is handled.
             stdOutAndErr = own_util.runShellCommandWait('mpc current')
             if stdOutAndErr != "" and 'error' not in stdOutAndErr:
                 # Stop playing music and stop Music Player Daemon service.
                 stdOutAndErr = own_util.runShellCommandWait('mpc stop;mpc clear;sudo service mpd stop')
                 switchOffLoudspeaker()
-                actionInterrupted = True  # Indicate the action was interrupted by an event.
+                eventHandled = True  # Indicate the event is handled.
             if globAlarmStatus == 'ALARMSET':
+                #time.sleep(1)
+                #stdOutAndErr = own_util.runShellCommandWait('sudo killall mplayer')
                 # Switch on loadspeaker, sound the alarm and switch off loudspeaker.
                 setVolumeLoudspeaker(volumeVoice)
                 switchOnLoudspeaker()
-                stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/alarm.mp3')
-                switchOffLoudspeaker()
+                # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
+                # When speech is finished the loudspeaker is turned off.
+                setVolumeLoudspeaker(volumeAlarm)
+                own_util.runShellCommandNowait('/usr/bin/mplayer /home/pi/Sources/alarm.mp3;sudo /usr/local/bin/own_gpio.py --loudspeaker off')
                 globAlarmStatus = ''  # reset alarm
-                actionInterrupted = True  # Indicate the action was interrupted by an event.
-            # If an action was interrupted by an event, the action is stopped and we continue to wait for the next event.
-            if actionInterrupted == True:
+                eventHandled = True  # Indicate the event is handled.
+            # If event is handled already here, continue to wait for the next event.
+            if eventHandled == True:
                 continue
             # Speak out greeting.
             setVolumeLoudspeaker(volumeVoice)
@@ -271,14 +278,16 @@ def personalAssistant():
                     else:
                         response = 'volume not valid'
                 elif re.search('alarm at.*', text, re.IGNORECASE):
-                    m = re.search('alarm at ([0-9]{1,2}(:?:| )[0-9]{1,2})', text, re.IGNORECASE)
-                    if m and m.group(1) and m.group(1) != "":  # be safe
-                        alarmString = m.group(1)
-                        # Use re.split because this supports multiple delimiters.
-                        t = re.split(':| ', alarmString)  # string tuple
-                        globAlarm = (int(t[0]), int(t[1]))  # integer tuple
+                    # Below the regular expression to deal with different time formats which the Speech To Text service can return.
+                    m = re.search('alarm at ([0-9](?:| )[0-9]{0,1})[^0-9]*([0-9](?:| )[0-9])$', text, re.IGNORECASE)
+                    if m and m.group(1) and m.group(2) and m.group(1) != "" and m.group(2) != "":  # be safe
+                        hours = m.group(1).replace(" ", "")  # remove spaces
+                        minutes = m.group(2).replace(" ", "")  # remove spaces
+                        # 'alarmString' will be a string like "11:15" or "0:07".
+                        alarmString = hours + ":" + minutes
+                        globAlarm = (int(hours), int(minutes))  # Integer tuple containing hours and minutes.
                         globAlarmStatus = 'SET'
-                        response = 'alarm set at ' + m.group(1)
+                        response = 'alarm set at ' + alarmString
                     else:
                         globAlarmStatus = ''  # Set off any previous alarm.
                         response = 'alarm not valid'
@@ -287,6 +296,8 @@ def personalAssistant():
                         response = 'alarm set at ' + alarmString
                     else:
                         response = 'alarm not set'
+                elif re.search('date$|time$', text, re.IGNORECASE):
+                    response = "{:%B %d %Y, %H:%M}".format(datetime.datetime.now())
                 elif re.search('lights on$', text, re.IGNORECASE):
                     tmpCmd = 'light-on'
                     response = 'lights on'
@@ -348,6 +359,7 @@ def personalAssistant():
             else:
                 # Not a valid voice command.
                 stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/nocomprendo.mp3')
+                switchOffLoudspeaker()
             if response != '':
                 logging.getLogger("MyLog").info('response: ' + response)
                 setVolumeLoudspeaker(volumeVoice)

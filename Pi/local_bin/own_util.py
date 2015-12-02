@@ -19,8 +19,11 @@ def runShellCommandWait(cmd):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
 
 
+# Below do not use stdout=subprocess.PIPE, stderr=subprocess.STDOUT as this causes problems.
+# For example mplayer stops after a minute in this case.
+# Instead redirection of stdout and stderr to /dev/null is used.
 def runShellCommandNowait(cmd):
-    subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    subprocess.Popen(cmd + '>/dev/null 2>&1', shell=True)
 
 
 def getNofConnections():
