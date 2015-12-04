@@ -55,7 +55,7 @@ def waitForEvent():
     SilenceCountInPeriods = 2 * FiveSegmentsSizeInBytes / PeriodSizeInBytes  # the 2 because of echoes.
     
     # Open the device in blocking capture mode. During the blocking other threads can run.
-    card = 'sysdefault:CARD=AK5370'
+    card = 'sysdefault:CARD=Device'
     inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NORMAL, card)
     
     # Set attributes: mono, SampleRate, 16 bit little endian samples
@@ -126,14 +126,16 @@ def waitForEvent():
 
 
 def initMicrophone():
-    # Set microphone capturing volume.
+    # Set microphone capturing volume and gain control.
     # To do this we have to find out which card is the capturing device with 'arecord -l'.
     # Suppose the capturing card is 'card 1', then its capabilities can be listed with 'amixer --card 1 contents'.
-    # This will show the numid's of its interfaces. Look for the ''Mic Capture Volume' which has for example numid=3.
-    # The microphone capturing volume can now be set with 'amixer -c 1 cset numid=3 78' which will set
-    # the capturing volume to 78.
-    # The maximum capturing volume can be checked by filling a higher value and check if this is set.
-    stdOutAndErr = own_util.runShellCommandWait('amixer -c 1 cset numid=3 78')
+    # These capabilities can differ per capturing device.
+    # This will show the numid's of its interfaces. Look for the 'Mic Capture Volume' which has for example numid=3.
+    # The microphone capturing volume can now be set with 'amixer -c 1 cset numid=3 16' which will set
+    # the capturing volume to 16.
+    # The microphone Auto Gain Control can be switched off with 'amixer -c 1 cset numid=4 0'.
+    stdOutAndErr = own_util.runShellCommandWait('amixer -c 1 cset numid=3 16')
+    stdOutAndErr = own_util.runShellCommandWait('amixer -c 1 cset numid=4 0')
 
 
 def initLoudspeaker():
@@ -338,7 +340,7 @@ def personalAssistant():
                     station = 'http://87.118.122.45:30710'
                     setVolumeLoudspeaker(volumeMusic)
                     stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
-                elif re.search('radio latin$', text, re.IGNORECASE):
+                elif re.search('radio salsa$', text, re.IGNORECASE):
                     # Start Music Player Daemon service and play music.
                     station = 'http://50.7.56.2:8020'
                     setVolumeLoudspeaker(volumeMusic)

@@ -3,6 +3,7 @@
 import time
 import math
 import alsaaudio, audioop
+import own_util
 
 
 def checkClaps(p1, p2, p3, p4, p5):
@@ -41,7 +42,7 @@ def waitForTriggerSound():
     SilenceCountInPeriods = 2 * FiveSegmentsSizeInBytes / PeriodSizeInBytes  # the 2 because of echoes.
     
     # Open the device in blocking capture mode. During the blocking other threads can run.
-    card = 'sysdefault:CARD=AK5370'
+    card = 'sysdefault:CARD=Device'
     inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NORMAL, card)
     
     # Set attributes: mono, SampleRate, 16 bit little endian samples
@@ -106,5 +107,6 @@ def waitForTriggerSound():
                         # No silence detected in tome, so start over again.
                         doContinue1 = True
 
-
+stdOutAndErr = own_util.runShellCommandWait('amixer -c 1 cset numid=3 16')
+stdOutAndErr = own_util.runShellCommandWait('amixer -c 1 cset numid=4 0')
 waitForTriggerSound()
