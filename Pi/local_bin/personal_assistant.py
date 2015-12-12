@@ -199,79 +199,6 @@ def switchOffLoudspeaker():
     stdOutAndErr = own_util.runShellCommandWait('sudo /usr/local/bin/own_gpio.py --loudspeaker off')
 
 
-def speechToText(service):
-    if service == "Google":
-        # Turn on and off light to indicate when the robot is listening.
-        own_util.switchLight(True)
-        stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | ffmpeg -loglevel panic -y -i - -ar 16000 -acodec flac /tmp/file.flac')
-        own_util.switchLight(False)
-
-        stdOutAndErr = own_util.runShellCommandWait('wget -q --post-file /tmp/file.flac --header="Content-Type: audio/x-flac; rate=16000" -O - "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextGoogleApiKey + '"')
-        # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
-        # The one with the highest confidence is listed first, so we filter out that one.
-
-        # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-        regex = re.compile('.*?"transcript":"([^"]+).*', re.DOTALL)
-        match = regex.match(stdOutAndErr)
-        if match is not None:
-            text = match.group(1)
-        else:
-            text = ""
-
-    elif service == "Ibm":
-        # Turn on and off light to indicate when the robot is listening.
-        own_util.switchLight(True)
-        stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | ffmpeg -loglevel panic -y -i - -ar 16000 -acodec flac /tmp/file.flac')
-        own_util.switchLight(False)
-
-        # Short delay to make sure file.wav is completely written to the SD card. Otherwise it can be still in a OS buffer
-        # and an incomplete file might be sent to the speech to text engine.
-        #time.sleep(0.1)
-        stdOutAndErr = own_util.runShellCommandWait('curl -u ' + secret.SpeechToTextIbmUsernamePassword + ' -H "content-type: audio/flac" --data-binary @"/tmp/file.flac" "https://stream.watsonplatform.net/speech-to-text/api/v1/recognize"')
-        # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
-        # The one with the highest confidence is listed first, so we filter out that one.
-
-        # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-        regex = re.compile('.*?"transcript": "([^"]+).*', re.DOTALL)
-        match = regex.match(stdOutAndErr)
-        if match is not None:
-            text = match.group(1)
-        else:
-            text = ""
-
-    # Remove leading and trailing whitespaces and return text.
-    return text.strip()
-
-
-def textToSpeech(text, language, speed):
-    # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
-    # When speech is finished the loudspeaker is turned off.
-    own_util.runShellCommandNowait('/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"' + ';sudo /usr/local/bin/own_gpio.py --loudspeaker off')
-
-
-def query(queryStr):
-    client = wolframalpha.Client(secret.WolfRamAlphaAppId)
-    res = client.query(queryStr)
-    if len(res.pods) > 0:
-        response = ""
-        pod = res.pods[1]
-        if pod.text:
-            response = pod.text
-        else:
-            response = "I have no answer for that"
-        # WolframAlpha can return Unicode, so encode response to ASCII.
-        response = response.encode('ascii', 'ignore')
-        # Remove words between brackets and the brackets as this is less relevant information.
-        regex = re.compile('\(.+?\)')
-        response = regex.sub('', response)
-        # Add space after 'euro' as WolframAlpha returns for example "euro25.25".
-        regex = re.compile('euro(?=[0-9])')  # only add space after 'euro' followed by a digit.
-        response = regex.sub('euro ', response)
-    else:
-        response = "Sorry, I am not sure."
-    return response
-
-
 def textToHoursAndMinutes(text, format):
     if format == 'Google':
         # Below the regular expression to deal with different time formats which the Google Speech To Text service can return.
@@ -283,7 +210,7 @@ def textToHoursAndMinutes(text, format):
             hoursStr = str(hours)
             minutesStr = str(minutes)
         else:
-            (hoursStr,minutesStr) = (None,None)
+            (hoursStr,minutesStr) = ("invalid","invalid")
 
     elif format == 'Ibm':
         numbers = {
@@ -328,8 +255,218 @@ def textToHoursAndMinutes(text, format):
             hoursStr = str(hours)
             minutesStr = str(minutes)
         else:
-            (hoursStr,minutesStr) = (None,None)
+            (hoursStr,minutesStr) = ("invalid","invalid")
     return (hoursStr,minutesStr)
+
+
+def speechToIntent(speechEngine):
+    text = ""
+    intent = ""
+    value = None
+    if speechEngine == "Google" or speechEngine == "Ibm":
+        if speechEngine == "Google":
+            # Turn on and off light to indicate when the robot is listening.
+            own_util.switchLight(True)
+            stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec flac -b: 128k /tmp/file.flac -y')
+            own_util.switchLight(False)
+
+            stdOutAndErr = own_util.runShellCommandWait('wget -q --post-file /tmp/file.flac --header="Content-Type: audio/x-flac; rate=16000" -O - "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextGoogleApiKey + '"')
+            # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
+            # First get confidence and only continue if confidence is high enough.
+            # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+            m = re.search('.*?"confidence":((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+            if m and m.group(1) and m.group(1) != "":  # be safe
+                try:
+                    confidence = float(m.group(1))
+                except ValueError:
+                    confidence = 0.0
+                if confidence < 0.1:
+                    # Not enough confidence, return with empty result.
+                    return (text,intent,value)
+            else:
+                # Not enough confidence, return with empty result.
+                return (text,intent,value)
+            # The transcript with the highest confidence is listed first, so we filter out that one.
+            m = re.search('.*?"transcript":"([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+            if m and m.group(1) and m.group(1) != "":  # be safe
+                text = m.group(1).strip()
+                # Now text contains the text as received by the speech service.
+                # All voice commands have to start with 'James'.
+                m = re.search('james (.*)', text, re.IGNORECASE)
+                if m and m.group(1) and m.group(1) != "":  # be safe
+                    text = m.group(1)
+
+        elif speechEngine == "Ibm":
+            # Turn on and off light to indicate when the robot is listening.
+            own_util.switchLight(True)
+            stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec flac -b: 128k /tmp/file.flac -y')
+            own_util.switchLight(False)
+
+            stdOutAndErr = own_util.runShellCommandWait('curl -u ' + secret.SpeechToTextIbmUsernamePassword + ' -H "content-type: audio/flac" --data-binary @"/tmp/file.flac" "https://stream.watsonplatform.net/speech-to-text/api/v1/recognize"')
+            # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
+            # First get confidence and only continue if confidence is high enough.
+            # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+            m = re.search('.*?"confidence": ((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+            if m and m.group(1) and m.group(1) != "":  # be safe
+                try:
+                    confidence = float(m.group(1))
+                except ValueError:
+                    confidence = 0.0
+                if confidence < 0.1:
+                    # Not enough confidence, return with empty result.
+                    return (text,intent,value)
+            else:
+                # Not enough confidence, return with empty result.
+                return (text,intent,value)
+            # The transcript with the highest confidence is listed first, so we filter out that one.
+            m = re.search('.*?"transcript": "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+            if m and m.group(1) and m.group(1) != "":  # be safe
+                text = m.group(1).strip()
+                # Now text contains the text as received by the speech service.
+                # All voice commands have to start with 'James'.
+                m = re.search('james (.*)', text, re.IGNORECASE)
+                if m and m.group(1) and m.group(1) != "":  # be safe
+                    text = m.group(1)
+            
+        # 'text' now containes the voice command without 'James'.
+        # Get intent and value.
+        if re.search('(?:volume|vol).*', text, re.IGNORECASE):
+            m = re.search('(?:volume|vol) ([0-9]|10)$', text, re.IGNORECASE)
+            if m and m.group(1) and m.group(1) != "":  # be safe
+                intent = "volume"
+                value = m.group(1)
+            else:
+                intent = "volume"
+                value = "invalid"
+        elif re.search('alarm at.*', text, re.IGNORECASE):
+            (hours,minutes) = textToHoursAndMinutes(text, speechEngine)
+            intent = "alarm"
+            value = (hours,minutes)
+        elif re.search('alarm$', text, re.IGNORECASE):
+            intent = "alarm"
+            value = None
+        elif re.search('date$|time$', text, re.IGNORECASE):
+            intent = "time"
+            value = None
+        elif re.search('lights on$', text, re.IGNORECASE):
+            intent = "light"
+            value = "on"
+        elif re.search('lights off$', text, re.IGNORECASE):
+            intent = "light"
+            value = "off"
+        elif re.search('demo$', text, re.IGNORECASE):
+            intent = "demo"
+            value = "start"
+        elif re.search('stop$', text, re.IGNORECASE):
+            intent = "demo"
+            value = "stop"
+        elif re.search('news$', text, re.IGNORECASE):
+            intent = "news"
+            value = "world"
+        elif re.search('news netherlands$', text, re.IGNORECASE):
+            intent = "news"
+            value = "netherlands"
+        elif re.search('news local$', text, re.IGNORECASE):
+            intent = "news"
+            value = "eindhoven"
+        elif re.search('weather$', text, re.IGNORECASE):
+            intent = "weather"
+            value = None
+        elif re.search('radio hits$', text, re.IGNORECASE):
+            intent = "radio"
+            value = "hits"
+        elif re.search('radio salsa$', text, re.IGNORECASE):
+            intent = "radio"
+            value = "salsa"
+        elif re.search('radio christmas$', text, re.IGNORECASE):
+            intent = "radio"
+            value = "christmas"
+        else:
+            intent = "query"
+            value = text
+
+    elif speechEngine == "WitAi":
+        # Turn on and off light to indicate when the robot is listening.
+        own_util.switchLight(True)
+        stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec mp3 -b: 128k /tmp/file.mp3 -y')
+        own_util.switchLight(False)
+
+        stdOutAndErr = own_util.runShellCommandWait('curl -XPOST "https://api.wit.ai/speech?v=20141022" -i -L -H "Authorization: Bearer ES2VFF3RZNQ2BTCW3CHWD7FTHOVA3HYW" -H "Content-Type: audio/mpeg3" --data-binary @"/tmp/file.mp3"')
+        # Now stdOutAndErr is a multiline string containing text, intents and values.
+        # First get confidence and only continue if confidence is high enough.
+        # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+        m = re.search('.*?"confidence" : ((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+        if m and m.group(1) and m.group(1) != "":  # be safe
+            try:
+                confidence = float(m.group(1))
+            except ValueError:
+                confidence = 0.0
+            if confidence < 0.1:
+                # Not enough confidence, return with empty result.
+                return (text,intent,value)
+        else:
+            # Not enough confidence, return with empty result.
+            return (text,intent,value)
+        # Get text.
+        m = re.search('.*?"_text" : "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+        if m and m.group(1) and m.group(1) != "":  # be safe
+            text = m.group(1).strip()
+            # Now text contains the text as received by the speech service.
+            # All voice commands have to start with 'James'.
+            m = re.search('james (.*)', text, re.IGNORECASE)
+            if m and m.group(1) and m.group(1) != "":  # be safe
+                text = m.group(1)
+                # 'text' now containes the voice command without 'James'.
+                # Get intent.
+                m = re.search('.*?"intent" : "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+                if m and m.group(1) and m.group(1) != "":  # be safe
+                    intent = m.group(1).strip()
+                    # Get value.
+                    m = re.search('.*?"value" : "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+                    if m and m.group(1) and m.group(1) != "":  # be safe
+                        value = m.group(1).strip()
+                        if intent == "alarm":
+                            # If intent = "alarm" then value must be a time.
+                            # Reformat time to a tuple (hours,minutes) so it can be used to set the alarm.
+                            m = re.search('.*?([0-9]+):([0-9]+).*', value, re.IGNORECASE)
+                            if m and m.group(1) and m.group(2) and m.group(1) != "" and m.group(2) != "":  # be safe
+                                value = (m.group(1),m.group(2))
+                            else:
+                                value = ""
+                    # If intent is "james" then the command should be passed to a knowledge engine.
+                    if intent == "query":
+                        value = text
+
+    return (text,intent,value)
+
+
+def textToSpeech(text, language, speed):
+    # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
+    # When speech is finished the loudspeaker is turned off.
+    own_util.runShellCommandNowait('/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"' + ';sudo /usr/local/bin/own_gpio.py --loudspeaker off')
+
+
+def query(queryStr):
+    client = wolframalpha.Client(secret.WolfRamAlphaAppId)
+    res = client.query(queryStr)
+    if len(res.pods) > 0:
+        response = ""
+        pod = res.pods[1]
+        if pod.text:
+            response = pod.text
+        else:
+            response = "I have no answer for that"
+        # WolframAlpha can return Unicode, so encode response to ASCII.
+        response = response.encode('ascii', 'ignore')
+        # Remove words between brackets and the brackets as this is less relevant information.
+        regex = re.compile('\(.+?\)')
+        response = regex.sub('', response)
+        # Add space after 'euro' as WolframAlpha returns for example "euro25.25".
+        regex = re.compile('euro(?=[0-9])')  # only add space after 'euro' followed by a digit.
+        response = regex.sub('euro ', response)
+    else:
+        response = "Sorry, I am not sure."
+    return response
 
 
 def personalAssistant():
@@ -338,7 +475,7 @@ def personalAssistant():
     switchOnLoudspeaker()
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
     switchOffLoudspeaker()
-    volumeVoice = '100%' # Volume used for voice responses.
+    volumeVoice = '90%' # Volume used for voice responses.
     volumeAlarm = '80%'  # Volume used for alarm.
     volumeMusic = '70%'  # Volume used for music, can be set by voice command.
     globAlarmStatus = ''
@@ -384,26 +521,25 @@ def personalAssistant():
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
 
             # Listen and translate speech to text.
-            text = speechToText("Google")
-            logging.getLogger("MyLog").info('speecht to text: ' + text)
+            (text,intent,value) = speechToIntent("Google")
+            logging.getLogger("MyLog").info('speech to text, intent, value: ' + str(text) + ", " + str(intent) + ", " + str(value))
             response = ''
-            # All voice commands have to start with 'James'.
-            m = re.search('james (.*)', text, re.IGNORECASE)
-            if m and m.group(1) and m.group(1) != "":  # be safe
-                text = m.group(1)
-                # 'text' now containes the voice command without 'James'.
-                # Handle the voice command.
-                if re.search('(?:volume|vol).*', text, re.IGNORECASE):
-                    m = re.search('(?:volume|vol) ([0-9]|10)$', text, re.IGNORECASE)
-                    if m and m.group(1) and m.group(1) != "":  # be safe
-                        volStr = m.group(1)
-                        volumeMusic = str(int(volStr) * 10) + '%'
-                        response = 'volume ' + volStr
+            # Handle the intent.
+            if intent == "volume":
+                if value != "invalid":
+                    volumeMusic = str(int(value) * 10) + '%'
+                    response = 'volume ' + value
+                else:
+                    response = 'volume not valid'
+            elif intent == "alarm":
+                if value is None:
+                    if globAlarmStatus == 'SET':
+                        response = 'alarm set at ' + alarmString
                     else:
-                        response = 'volume not valid'
-                elif re.search('alarm at.*', text, re.IGNORECASE):
-                    (hours,minutes) = textToHoursAndMinutes(text, "Google")
-                    if hours is not None:
+                        response = 'alarm not set'
+                else:
+                    (hours,minutes) = value
+                    if hours != "invalid":
                         # 'alarmString' will be a string like "11:15" or "0:07".
                         alarmString = hours + ":" + minutes
                         globAlarm = (int(hours),int(minutes))  # Integer tuple containing hours and minutes.
@@ -412,73 +548,56 @@ def personalAssistant():
                     else:
                         globAlarmStatus = ''  # Set off any previous alarm.
                         response = 'alarm not valid'
-                elif re.search('alarm$', text, re.IGNORECASE):
-                    if globAlarmStatus == 'SET':
-                        response = 'alarm set at ' + alarmString
-                    else:
-                        response = 'alarm not set'
-                elif re.search('date$|time$', text, re.IGNORECASE):
-                    response = "{:%B %d %Y, %H:%M}".format(datetime.datetime.now())
-                elif re.search('lights on$', text, re.IGNORECASE):
+            elif intent == "time":
+                response = "{:%B %d %Y, %H:%M}".format(datetime.datetime.now())
+            elif intent == "light":
+                if value == "on":
                     tmpCmd = 'light-on'
                     response = 'lights on'
-                elif re.search('lights off$', text, re.IGNORECASE):
+                else:
                     tmpCmd = 'light-off'
                     response = 'lights off'
-                elif re.search('demo$', text, re.IGNORECASE):
+            elif intent == "demo":
+                if value == "start":
                     tmpCmd = 'demo-start'
                     response = 'demo activated'
                     globDoHomeRun = True
-                elif re.search('stop$', text, re.IGNORECASE):
+                else:
                     tmpCmd = 'demo-stop'
                     response = 'demo stopped'
                     globDoHomeRun = False
-                elif re.search('news$', text, re.IGNORECASE):
+            elif intent == "news":
+                if value == "world":
                     d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')
-                    response = ''
-                    for post in d.entries[:10]:  # Restrict to 10 entries.
-                        # feedparser can return Unicode strings, so convert to ASCII.
-                        response = response + '\n' + post.title.encode('ascii', 'ignore')
-                    language = 'nl-nl'
-                elif re.search('news netherlands$', text, re.IGNORECASE):
+                elif value == "netherlands":
                     d = feedparser.parse('http://www.ed.nl/cmlink/1.3280352')
-                    response = ''
-                    for post in d.entries[:10]:  # Restrict to 10 entries.
-                        # feedparser can return Unicode strings, so convert to ASCII.
-                        response = response + '\n' + post.title.encode('ascii', 'ignore')
-                    language = 'nl-nl'
-                elif re.search('news local$', text, re.IGNORECASE):
-                    d = feedparser.parse('http://www.ed.nl/cmlink/1.4419308')
-                    response = ''
-                    for post in d.entries[:1000]:  # Restrict to 10 entries.
-                        # feedparser can return Unicode strings, so convert to ASCII.
-                        response = response + '\n' + post.title.encode('ascii', 'ignore')
-                    language = 'nl-nl'
-                elif re.search('weather$', text, re.IGNORECASE):
-                    d = feedparser.parse('http://projects.knmi.nl/RSSread/rss_KNMIverwachtingen.php')
-                    response = d['entries'][0]['description']
-                    # feedparser can return Unicode strings, so convert to ASCII.
-                    response = response.encode('ascii', 'ignore')
-                    language = 'nl-nl'
-                elif re.search('radio hits$', text, re.IGNORECASE):
-                    # Start Music Player Daemon service and play music.
-                    station = 'http://87.118.122.45:30710'
-                    setVolumeLoudspeaker(volumeMusic)
-                    stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
-                elif re.search('radio salsa$', text, re.IGNORECASE):
-                    # Start Music Player Daemon service and play music.
-                    station = 'http://50.7.56.2:8020'
-                    setVolumeLoudspeaker(volumeMusic)
-                    stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
-                elif re.search('radio christmas$', text, re.IGNORECASE):
-                    # Start Music Player Daemon service and play music.
-                    station = 'http://108.61.73.117:8124'
-                    setVolumeLoudspeaker(volumeMusic)
-                    stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
                 else:
-                    response = query(text)
+                    d = feedparser.parse('http://www.ed.nl/cmlink/1.4419308')
+                response = ''
+                for post in d.entries[:1000]:  # Restrict to 10 entries.
+                    # feedparser can return Unicode strings, so convert to ASCII.
+                    response = response + '\n' + post.title.encode('ascii', 'ignore')
+                language = 'nl-nl'
+            elif intent == "weather":
+                d = feedparser.parse('http://projects.knmi.nl/RSSread/rss_KNMIverwachtingen.php')
+                response = d['entries'][0]['description']
+                # feedparser can return Unicode strings, so convert to ASCII.
+                response = response.encode('ascii', 'ignore')
+                language = 'nl-nl'
+            elif intent == "radio":
+                if value == "hits":
+                    station = 'http://87.118.122.45:30710'
+                elif value == "salsa":
+                    station = 'http://50.7.56.2:8020'
+                else:
+                    station = 'http://108.61.73.117:8124'
+                # Start Music Player Daemon service and play music.
+                setVolumeLoudspeaker(volumeMusic)
+                stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
+            elif intent == "query":
+                response = query(text)
             else:
-                # Not a valid voice command.
+                # Not a valid intend.
                 stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/nocomprendo.mp3')
                 switchOffLoudspeaker()
             if response != '':
