@@ -35,11 +35,11 @@ def readCompass(debug = False):
     # This calibration will result in x_out and y_out varying between -200 and +200.
     # Because the HMC5883L is not exactly linear or mounted exactly horizontal,
     # we apply an extra correction (offsetCorrectionAt180Degrees) at 180 degrees to straigten the curve.
-    x_factor = 0.95
-    x_offset = 113.95
-    y_factor = 0.9
-    y_offset = 185.52
-    rawDegreesAt180Degrees = 186.90
+    x_factor = 0.97
+    x_offset = 107.25
+    y_factor = 0.92
+    y_offset = 191.76
+    rawDegreesAt180Degrees = 197.66
     
     offsetCorrectionAt180Degrees = 180.0 - rawDegreesAt180Degrees
     

@@ -5,13 +5,20 @@ import math
 import re
 import datetime
 import alsaaudio, audioop
+from scipy import signal
+import struct
+import numpy as np
 import wolframalpha
 import feedparser
 import logging
 import own_util
-import personal_assistant
 import secret
 
+# Global constants
+SampleRate = 16000
+NyquistFrequency = 0.5 * SampleRate
+B, A = signal.butter(5, [4400.0/NyquistFrequency, 4600.0/NyquistFrequency], btype='band')
+FirCoeff = signal.firwin(29, 4000.0/NyquistFrequency, pass_zero=False)
 
 # Global variables
 globInteractive = False
@@ -19,8 +26,38 @@ globDoHomeRun = False
 globCmd = ''
 
 
+# This function filters an audioBuffer which is a Python string of nsamples shorts.
+# It returns the filtered signal as a Python string of nsamples shorts.
+# The string type is used to serialize data in order to send it over a serial line.
+def butterBandpassFilter(audioBuffer, nsamples):
+    global SampleRate, NyquistFrequency, B, A
+    floatArray = struct.unpack('h'*nsamples,audioBuffer)
+    floatArrayFiltered = signal.lfilter(B, A, floatArray)
+    # Make sure all values fit in a short to prevent errors in struct.pack().
+    np.clip(floatArrayFiltered, -32768, 32767, floatArrayFiltered)
+    return struct.pack('h'*nsamples,*floatArrayFiltered)
+
+
+# This function filters an audioBuffer which is a Python string of nsamples shorts.
+# It returns the filtered signal as a Python string of nsamples shorts.
+# The string type is used to serialize data in order to send it over a serial line.
+def firHighpassFilter(audioBuffer, nsamples):
+    global SampleRate, NyquistFrequency, FirCoeff
+    floatArray = struct.unpack('h'*nsamples,audioBuffer)
+    floatArrayFiltered = signal.lfilter(FirCoeff, 1.0, floatArray)
+    # Make sure all values fit in a short to prevent errors in struct.pack().
+    np.clip(floatArrayFiltered, -32768, 32767, floatArrayFiltered)
+    return struct.pack('h'*nsamples,*floatArrayFiltered)
+
+
 def checkClaps(p1, p2, p3, p4, p5):
     minClapRatio = 5.0
+    # Prevent division by zero.
+    p1 = max(p1, 1.0)
+    p2 = max(p2, 1.0)
+    p3 = max(p3, 1.0)
+    p4 = max(p4, 1.0)
+    p5 = max(p5, 1.0)
     if p2 / p1 > minClapRatio and p2 / p3 > minClapRatio and p4 / p3 > minClapRatio and p4 / p5 > minClapRatio:
         return True
     else:
@@ -29,11 +66,14 @@ def checkClaps(p1, p2, p3, p4, p5):
 
 def checkSilence(p1, p2, p3, p4, p5):
     maxSilenceRatio = 3.0
-    SilenceThreshold = 10000000.0
+    SilenceThreshold = 1000.0
     avg = (p1 + p2 + p3 + p4 + p5) / 5.0
-    # First check for zero to prevent division by zero.
-    if (p1 == 0 or p2 == 0 or p3 == 0 or p4 == 0 or p5 == 0):
-        return False
+    # Prevent division by zero.
+    p1 = max(p1, 1.0)
+    p2 = max(p2, 1.0)
+    p3 = max(p3, 1.0)
+    p4 = max(p4, 1.0)
+    p5 = max(p5, 1.0)
     # Silence is True when all powers are below SilenceThreshold or when all powers are about equal.
     if (p1 < SilenceThreshold and p2 < SilenceThreshold and p3 < SilenceThreshold and p4 < SilenceThreshold and p5 < SilenceThreshold) or (abs(p1 - avg) / min(p1, avg) < maxSilenceRatio and abs(p2 - avg) / min(p2, avg) < maxSilenceRatio and abs(p3 - avg) / min(p3, avg) < maxSilenceRatio and abs(p4 - avg) / min(p4, avg) < maxSilenceRatio and abs(p5 - avg) / min(p5, avg) < maxSilenceRatio):
         return True
@@ -44,15 +84,15 @@ def checkSilence(p1, p2, p3, p4, p5):
 # This function waits for an event like the trigger sound or alarm and returns when the event has occurred.
 def waitForEvent():
     global globAlarmStatus, globAlarm
+    global SampleRate
     # Constants used in this function.
-    SampleRate = 16000
     PeriodSizeInSamples = 500
-    BytesPerSample = 2 # Corrsponding to the PCM_FORMAT_S16_LE setting.
+    BytesPerSample = 2 # Corresponding to the PCM_FORMAT_S16_LE setting.
     PeriodSizeInBytes = PeriodSizeInSamples * BytesPerSample
-    FiveSegmentsSizeInBytes = 20000
-    SegmentSizeInBytes = 4000
-    ClapCountInPeriods = FiveSegmentsSizeInBytes / PeriodSizeInBytes
-    SilenceCountInPeriods = 2 * FiveSegmentsSizeInBytes / PeriodSizeInBytes  # the 2 because of echoes.
+    SegmentSizeInBytes = 4 * PeriodSizeInBytes
+    FiveSegmentSizeInBytes = 5 * SegmentSizeInBytes
+    ClapCountInPeriods = FiveSegmentSizeInBytes / PeriodSizeInBytes
+    SilenceCountInPeriods = 1.5 * FiveSegmentSizeInBytes / PeriodSizeInBytes  # the 1.5 because of echoes.
     
     # Open the device in blocking capture mode. During the blocking other threads can run.
     card = 'sysdefault:CARD=Device'
@@ -76,16 +116,17 @@ def waitForEvent():
     audioBuffer = ""
     while doContinue1 or doContinue2:
         # Check for Alarm event.
-        if globAlarmStatus == 'SET' and datetime.datetime.now().time() > datetime.time(globAlarm[0], globAlarm[1]):
+        if globAlarmStatus == 'SET' and datetime.datetime.now().time() > datetime.time(*globAlarm):
             # Indicate alarm and return.
             globAlarmStatus = 'ALARMSET'
             return
         
         # Read PeriodSizeInSamples audio samples from the audio input which is PeriodSizeInBytes bytes.
         # newAudioData will be a sequence of audio samples, stored as a Python string.
-        l,newAudioData = inp.read()
+        l,newAudioDataUnfiltered = inp.read()
+        newAudioData = butterBandpassFilter(newAudioDataUnfiltered, l)
         audioBuffer = audioBuffer + newAudioData
-        if len(audioBuffer) >= FiveSegmentsSizeInBytes:
+        if len(audioBuffer) >= FiveSegmentSizeInBytes:
             p1 = math.pow(audioop.rms(audioBuffer[0:1*SegmentSizeInBytes], BytesPerSample), 2)
             p2 = math.pow(audioop.rms(audioBuffer[1*SegmentSizeInBytes:2*SegmentSizeInBytes], BytesPerSample), 2)
             p3 = math.pow(audioop.rms(audioBuffer[2*SegmentSizeInBytes:3*SegmentSizeInBytes], BytesPerSample), 2)
@@ -95,7 +136,9 @@ def waitForEvent():
             # The code below will be executed every period or PeriodSizeInSamples samples.
             # With 16 KHz sample rate this means every 31.25 ms.
             # Five powers p1..p5 are available of the last 5 segments.
-            # We check if there are first 5 segments with silence, then 5 segments with two claps, then 5 segments with silence again.
+            # We check if there are first 5 segments with silence,
+            # then 5 segments with two claps (with the claps in segment 2 and 4),
+            # then 5 segments with silence again.
             if doContinue1:
                 # Check if there are 5 segments of silence.
                 if checkSilence(p1, p2, p3, p4, p5):
@@ -156,22 +199,48 @@ def switchOffLoudspeaker():
     stdOutAndErr = own_util.runShellCommandWait('sudo /usr/local/bin/own_gpio.py --loudspeaker off')
 
 
-def speechToText():
-    stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -f cd -t wav | ffmpeg -loglevel panic -y -i - -ar 16000 -acodec flac /tmp/file.flac')
+def speechToText(service):
+    if service == "Google":
+        # Turn on and off light to indicate when the robot is listening.
+        own_util.switchLight(True)
+        stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | ffmpeg -loglevel panic -y -i - -ar 16000 -acodec flac /tmp/file.flac')
+        own_util.switchLight(False)
 
-    stdOutAndErr = own_util.runShellCommandWait('wget -q --post-file /tmp/file.flac --header="Content-Type: audio/x-flac; rate=16000" -O - "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextApiKey + '"')
-    # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
-    # The one with the highest confidence is listed first, so we filter out that one.
+        stdOutAndErr = own_util.runShellCommandWait('wget -q --post-file /tmp/file.flac --header="Content-Type: audio/x-flac; rate=16000" -O - "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextGoogleApiKey + '"')
+        # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
+        # The one with the highest confidence is listed first, so we filter out that one.
 
-    # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-    regex = re.compile('.*?"transcript":"([^"]+).*', re.DOTALL)
-    match = regex.match(stdOutAndErr)
-    if match is not None:
-        text = match.group(1)
-    else:
-        text = ""
+        # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+        regex = re.compile('.*?"transcript":"([^"]+).*', re.DOTALL)
+        match = regex.match(stdOutAndErr)
+        if match is not None:
+            text = match.group(1)
+        else:
+            text = ""
 
-    return text
+    elif service == "Ibm":
+        # Turn on and off light to indicate when the robot is listening.
+        own_util.switchLight(True)
+        stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | ffmpeg -loglevel panic -y -i - -ar 16000 -acodec flac /tmp/file.flac')
+        own_util.switchLight(False)
+
+        # Short delay to make sure file.wav is completely written to the SD card. Otherwise it can be still in a OS buffer
+        # and an incomplete file might be sent to the speech to text engine.
+        #time.sleep(0.1)
+        stdOutAndErr = own_util.runShellCommandWait('curl -u ' + secret.SpeechToTextIbmUsernamePassword + ' -H "content-type: audio/flac" --data-binary @"/tmp/file.flac" "https://stream.watsonplatform.net/speech-to-text/api/v1/recognize"')
+        # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
+        # The one with the highest confidence is listed first, so we filter out that one.
+
+        # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+        regex = re.compile('.*?"transcript": "([^"]+).*', re.DOTALL)
+        match = regex.match(stdOutAndErr)
+        if match is not None:
+            text = match.group(1)
+        else:
+            text = ""
+
+    # Remove leading and trailing whitespaces and return text.
+    return text.strip()
 
 
 def textToSpeech(text, language, speed):
@@ -203,6 +272,66 @@ def query(queryStr):
     return response
 
 
+def textToHoursAndMinutes(text, format):
+    if format == 'Google':
+        # Below the regular expression to deal with different time formats which the Google Speech To Text service can return.
+        # Formats that can be handled are like: '23:15', 'zero 0 7', '0:07', '0 0 7', 'zero3zero' etc.
+        m = re.search('alarm at ((?:[0-9]|zero)(?:| )(?:[0-9]|zero){0,1})[^0-9]*((?:[0-9]|zero)(?:| )(?:[0-9]|zero))$', text, re.IGNORECASE)
+        if m and m.group(1) and m.group(2) and m.group(1) != "" and m.group(2) != "":  # be safe
+            hours = m.group(1).replace(" ", "").replace("zero", "0")  # Remove spaces and replace "zero" with "0".
+            minutes = m.group(2).replace(" ", "").replace("zero", "0")  # Remove spaces and replace "zero" with "0".
+            hoursStr = str(hours)
+            minutesStr = str(minutes)
+        else:
+            (hoursStr,minutesStr) = (None,None)
+
+    elif format == 'Ibm':
+        numbers = {
+            'zero':0,
+            'one':1,
+            'two':2,
+            'three':3,
+            'four':4,
+            'five':5,
+            'six':6,
+            'seven':7,
+            'eight':8,
+            'nine':9,
+            'ten':10,
+            'eleven':11,
+            'twelve':12,
+            'thirteen':13,
+            'fourteen':14,
+            'fifteen':15,
+            'sixteen':16,
+            'seventeen':17,
+            'eighteen':18,
+            'nineteen':19,
+            'twenty':20,
+            'thirty':30,
+            'fourty':40,
+            'fifty':50,
+        }
+        # Below the regular expression to deal with different time formats which the Ibm Speech To Text service can return.
+        # Formats that can be handled are like: 'twelve nineteen', 'eight thirty five', 'eight three five', 'five zero one', 'zero zero seven', 'twenty three twenty five' etc.
+        m = re.search('alarm at ([^\s]+)\s+([^\s]+)(?:|\s+([^\s]+)(?:|\s+([^\s]+)))\s*$', text, re.IGNORECASE)
+        if m and m.group(1) and m.group(2) and m.group(1) in numbers and m.group(2) in numbers:  # be safe
+            hours = numbers[m.group(1)]
+            minutes = numbers[m.group(2)]
+            if minutes >=1 and minutes <=3:
+                hours = hours + minutes
+                minutes = 0
+            if m.group(3) and m.group(3) in numbers:
+                minutes = minutes + numbers[m.group(3)]
+            if m.group(4) and m.group(4) in numbers:
+                minutes = minutes + numbers[m.group(4)]
+            hoursStr = str(hours)
+            minutesStr = str(minutes)
+        else:
+            (hoursStr,minutesStr) = (None,None)
+    return (hoursStr,minutesStr)
+
+
 def personalAssistant():
     global globInteractive, globDoHomeRun, globCmd
     global globAlarmStatus, globAlarm
@@ -210,7 +339,7 @@ def personalAssistant():
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
     switchOffLoudspeaker()
     volumeVoice = '100%' # Volume used for voice responses.
-    volumeAlarm = '85%'  # Volume used for alarm.
+    volumeAlarm = '80%'  # Volume used for alarm.
     volumeMusic = '70%'  # Volume used for music, can be set by voice command.
     globAlarmStatus = ''
     while True:
@@ -245,7 +374,7 @@ def personalAssistant():
                 setVolumeLoudspeaker(volumeAlarm)
                 own_util.runShellCommandNowait('/usr/bin/mplayer /home/pi/Sources/alarm.mp3;sudo /usr/local/bin/own_gpio.py --loudspeaker off')
                 globAlarmStatus = ''  # reset alarm
-                eventHandled = True  # Indicate the event is handled.
+                eventHandled = True   # Indicate the event is handled.
             # If event is handled already here, continue to wait for the next event.
             if eventHandled == True:
                 continue
@@ -255,7 +384,7 @@ def personalAssistant():
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
 
             # Listen and translate speech to text.
-            text = speechToText()
+            text = speechToText("Google")
             logging.getLogger("MyLog").info('speecht to text: ' + text)
             response = ''
             # All voice commands have to start with 'James'.
@@ -273,15 +402,11 @@ def personalAssistant():
                     else:
                         response = 'volume not valid'
                 elif re.search('alarm at.*', text, re.IGNORECASE):
-                    # Below the regular expression to deal with different time formats which the Speech To Text service can return.
-                    # Formats that can be handled are like: '23:15', 'zero 0 7', '0:07', '0 0 7', 'zero3zero' etc.
-                    m = re.search('alarm at ((?:[0-9]|zero)(?:| )(?:[0-9]|zero){0,1})[^0-9]*((?:[0-9]|zero)(?:| )(?:[0-9]|zero))$', text, re.IGNORECASE)
-                    if m and m.group(1) and m.group(2) and m.group(1) != "" and m.group(2) != "":  # be safe
-                        hours = m.group(1).replace(" ", "").replace("zero", "0")  # Remove spaces and replace "zero" with "0".
-                        minutes = m.group(2).replace(" ", "").replace("zero", "0")  # Remove spaces and replace "zero" with "0".
+                    (hours,minutes) = textToHoursAndMinutes(text, "Google")
+                    if hours is not None:
                         # 'alarmString' will be a string like "11:15" or "0:07".
                         alarmString = hours + ":" + minutes
-                        globAlarm = (int(hours), int(minutes))  # Integer tuple containing hours and minutes.
+                        globAlarm = (int(hours),int(minutes))  # Integer tuple containing hours and minutes.
                         globAlarmStatus = 'SET'
                         response = 'alarm set at ' + alarmString
                     else:
