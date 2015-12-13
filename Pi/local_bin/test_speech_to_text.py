@@ -18,6 +18,8 @@ stdOutAndErr = own_util.runShellCommandWait('amixer -c 1 cset numid=3 16')
 stdOutAndErr = own_util.runShellCommandWait('amixer -c 1 cset numid=4 0')
 
 
+# Converts a text containing a time indication in words or in digits to a uniform (hours,minutes) tuple.
+# It supports the formats of multiple STT engines.
 def textToHoursAndMinutes(text, format):
     if format == 'Google':
         # Below the regular expression to deal with different time formats which the Google Speech To Text service can return.
@@ -78,78 +80,49 @@ def textToHoursAndMinutes(text, format):
     return (hoursStr,minutesStr)
 
 
-def speechToIntent(speechEngine):
+# Records speech from the microphone and translates this into a (text,intent,value) tuple.
+# It supports the formats of multiple STT engines.
+def speechToIntent(sttEngine):
     text = ""
     intent = ""
     value = None
-    if speechEngine == "Google" or speechEngine == "Ibm":
-        if speechEngine == "Google":
-            # Turn on and off light to indicate when the robot is listening.
-            own_util.switchLight(True)
-            stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec flac -b: 128k /tmp/file.flac -y')
-            own_util.switchLight(False)
-
+    if sttEngine == "Google" or sttEngine == "Ibm":
+        # Turn on and off light to indicate when the robot is listening.
+        own_util.switchLight(True)
+        stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec flac -b: 128k /tmp/file.flac -y')
+        own_util.switchLight(False)
+        if sttEngine == "Google":
             stdOutAndErr = own_util.runShellCommandWait('wget -q --post-file /tmp/file.flac --header="Content-Type: audio/x-flac; rate=16000" -O - "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextGoogleApiKey + '"')
-            print stdOutAndErr
-            # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
-            # First get confidence and only continue if confidence is high enough.
-            # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-            m = re.search('.*?"confidence":((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
-            if m and m.group(1) and m.group(1) != "":  # be safe
-                try:
-                    confidence = float(m.group(1))
-                    print "confidence:", confidence
-                except ValueError:
-                    confidence = 0.0
-                if confidence < 0.1:
-                    # Not enough confidence, return with empty result.
-                    return (text,intent,value)
-            else:
-                # Not enough confidence, return with empty result.
-                return (text,intent,value)
-            # The transcript with the highest confidence is listed first, so we filter out that one.
-            m = re.search('.*?"transcript":"([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
-            if m and m.group(1) and m.group(1) != "":  # be safe
-                text = m.group(1).strip()
-                # Now text contains the text as received by the speech service.
-                # All voice commands have to start with 'James'.
-                m = re.search('james (.*)', text, re.IGNORECASE)
-                if m and m.group(1) and m.group(1) != "":  # be safe
-                    text = m.group(1)
 
-        elif speechEngine == "Ibm":
-            # Turn on and off light to indicate when the robot is listening.
-            own_util.switchLight(True)
-            stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec flac -b: 128k /tmp/file.flac -y')
-            own_util.switchLight(False)
-
+        elif sttEngine == "Ibm":
             stdOutAndErr = own_util.runShellCommandWait('curl -u ' + secret.SpeechToTextIbmUsernamePassword + ' -H "content-type: audio/flac" --data-binary @"/tmp/file.flac" "https://stream.watsonplatform.net/speech-to-text/api/v1/recognize"')
-            print stdOutAndErr
-            # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
-            # First get confidence and only continue if confidence is high enough.
-            # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-            m = re.search('.*?"confidence": ((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
-            if m and m.group(1) and m.group(1) != "":  # be safe
-                try:
-                    confidence = float(m.group(1))
-                    print "confidence:", confidence
-                except ValueError:
-                    confidence = 0.0
-                if confidence < 0.1:
-                    # Not enough confidence, return with empty result.
-                    return (text,intent,value)
-            else:
+        
+        print stdOutAndErr
+        # Now stdOutAndErr is a multiline string containing possible transcripts with confidence levels.
+        # First get confidence and only continue if confidence is high enough.
+        # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+        m = re.search('.*?"confidence"\s*:\s*((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+        if m and m.group(1) and m.group(1) != "":  # be safe
+            try:
+                confidence = float(m.group(1))
+                print "confidence:", confidence
+            except ValueError:
+                confidence = 0.0
+            if confidence < 0.1:
                 # Not enough confidence, return with empty result.
                 return (text,intent,value)
-            # The transcript with the highest confidence is listed first, so we filter out that one.
-            m = re.search('.*?"transcript": "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+        else:
+            # Not enough confidence, return with empty result.
+            return (text,intent,value)
+        # The transcript with the highest confidence is listed first, so we filter out that one.
+        m = re.search('.*?"transcript"\s*:\s*"([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+        if m and m.group(1) and m.group(1) != "":  # be safe
+            text = m.group(1).strip()
+            # Now text contains the text as received by the speech service.
+            # All voice commands have to start with 'James'.
+            m = re.search('james (.*)', text, re.IGNORECASE)
             if m and m.group(1) and m.group(1) != "":  # be safe
-                text = m.group(1).strip()
-                # Now text contains the text as received by the speech service.
-                # All voice commands have to start with 'James'.
-                m = re.search('james (.*)', text, re.IGNORECASE)
-                if m and m.group(1) and m.group(1) != "":  # be safe
-                    text = m.group(1)
+                text = m.group(1)
             
         # 'text' now containes the voice command without 'James'.
         # Get intent and value.
@@ -162,7 +135,7 @@ def speechToIntent(speechEngine):
                 intent = "volume"
                 value = "invalid"
         elif re.search('alarm at.*', text, re.IGNORECASE):
-            (hours,minutes) = textToHoursAndMinutes(text, speechEngine)
+            (hours,minutes) = textToHoursAndMinutes(text, sttEngine)
             intent = "alarm"
             value = (hours,minutes)
         elif re.search('alarm$', text, re.IGNORECASE):
@@ -204,11 +177,11 @@ def speechToIntent(speechEngine):
         elif re.search('radio christmas$', text, re.IGNORECASE):
             intent = "radio"
             value = "christmas"
-        else:
+        elif text != "":
             intent = "query"
             value = text
 
-    elif speechEngine == "WitAi":
+    elif sttEngine == "WitAi":
         # Turn on and off light to indicate when the robot is listening.
         own_util.switchLight(True)
         stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec mp3 -b: 128k /tmp/file.mp3 -y')
@@ -219,7 +192,7 @@ def speechToIntent(speechEngine):
         # Now stdOutAndErr is a multiline string containing text, intents and values.
         # First get confidence and only continue if confidence is high enough.
         # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-        m = re.search('.*?"confidence" : ((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+        m = re.search('.*?"confidence"\s*:\s*((?:[0-9]|\.)+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
         if m and m.group(1) and m.group(1) != "":  # be safe
             try:
                 confidence = float(m.group(1))
@@ -233,32 +206,32 @@ def speechToIntent(speechEngine):
             # Not enough confidence, return with empty result.
             return (text,intent,value)
         # Get text.
-        m = re.search('.*?"_text" : "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+        m = re.search('.*?"_text"\s*:\s*"([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
         if m and m.group(1) and m.group(1) != "":  # be safe
             text = m.group(1).strip()
-            # Now text contains the text as rece ived by the speech service.
+            # Now text contains the text as received by the speech service.
             # All voice commands have to start with 'James'.
             m = re.search('james (.*)', text, re.IGNORECASE)
             if m and m.group(1) and m.group(1) != "":  # be safe
                 text = m.group(1)
                 # 'text' now containes the voice command without 'James'.
                 # Get intent.
-                m = re.search('.*?"intent" : "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+                m = re.search('.*?"intent"\s*:\s*"([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
                 if m and m.group(1) and m.group(1) != "":  # be safe
                     intent = m.group(1).strip()
                     # Get value.
-                    m = re.search('.*?"value" : "([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
+                    m = re.search('.*?"value"\s*:\s*"([^"]+).*', stdOutAndErr, re.IGNORECASE | re.DOTALL)
                     if m and m.group(1) and m.group(1) != "":  # be safe
                         value = m.group(1).strip()
                         if intent == "alarm":
-                            # If intent = "alarm" then value must be a time.
+                            # If intent is "alarm" then value must be a time.
                             # Reformat time to a tuple (hours,minutes) so it can be used to set the alarm.
                             m = re.search('.*?([0-9]+):([0-9]+).*', value, re.IGNORECASE)
                             if m and m.group(1) and m.group(2) and m.group(1) != "" and m.group(2) != "":  # be safe
                                 value = (m.group(1),m.group(2))
                             else:
                                 value = ""
-                    # If intent is "james" then the command should be passed to a knowledge engine.
+                    # If intent is "query" then the command should be passed to a knowledge engine.
                     if intent == "query":
                         value = text
 
