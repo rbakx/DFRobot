@@ -276,8 +276,12 @@ def speechToIntent(sttEngine):
         own_util.switchLight(False)
         if sttEngine == "Google":
             stdOutAndErr = own_util.runShellCommandWait('curl -s -X POST --header "content-type: audio/x-flac; rate=16000;" --data-binary @"/tmp/file.flac" "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextGoogleApiKey + '"')
-            # Google always replies with an empty JSON response '{"result":[]}' on the first line. The second
-            # line contains the actual JSON result, so take this line.
+            # Google always replies with an empty JSON response '{"result":[]}' on the first line.
+            # If there is speech, The second line contains the actual JSON result.
+            # If there is no speech, there is no second line so we have to check this.
+            if len(stdOutAndErr.splitlines()) != 2:
+                # Return empty text, intent and value to indicate the voice command is invalid.
+                return (text,intent,value)
             stdOutAndErr = stdOutAndErr.splitlines()[1]
             # Now stdOutAndErr contains the JSON response from the STT engine.
             decoded = json.loads(stdOutAndErr)
@@ -486,8 +490,6 @@ def personalAssistant():
                 switchOffLoudspeaker()
                 eventHandled = True  # Indicate the event is handled.
             if globAlarmStatus == 'ALARMSET':
-                #time.sleep(1)
-                #stdOutAndErr = own_util.runShellCommandWait('sudo killall mplayer')
                 # Switch on loadspeaker, sound the alarm and switch off loudspeaker.
                 setVolumeLoudspeaker(volumeVoice)
                 switchOnLoudspeaker()
@@ -588,6 +590,7 @@ def personalAssistant():
             if response != '':
                 logging.getLogger("MyLog").info('response: ' + response)
                 setVolumeLoudspeaker(volumeVoice)
+                # Non blocking call to textToSpeech() which will turn off the loudspeaker when it's done.
                 textToSpeech(response, language, '0')
                 # Now we activate the interactive command, after the speech response is generated.
                 if tmpCmd != '':
@@ -599,6 +602,8 @@ def personalAssistant():
                     globInteractive = False
         except Exception,e:
             logging.getLogger("MyLog").info('personalAssistant exception: ' + str(e))
+            # Switch off the loudspeaker if it is still on.
+            switchOffLoudspeaker()
 
 
 def startPersonalAssistant():
