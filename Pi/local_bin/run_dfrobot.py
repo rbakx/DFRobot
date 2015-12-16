@@ -273,15 +273,11 @@ def homeRun():
                         else:
                             own_util.move('forward', 140, 1.0, doMove)
                     else:
-                        # Move cam down again.
-                        own_util.moveCamAbs(0, 0.1)
                         # Make one more additional move towards the garage before turning 180 degrees.
                         own_util.move('forward', 180, 1.0, doMove)
                         compass.gotoDegreeRel(180, doMove)
                         for i in range(0, 6):
                             own_util.move('backward', 140, 1.0, doMove)
-                        # Switch off light if it was on.
-                        own_util.switchLight(False)
                         globMyLog.info('Home found!')
                         globContinueCapture = False
 
@@ -325,6 +321,10 @@ def homeRun():
     globContinueCapture = False
     communication.globDoHomeRun = False
     personal_assistant.globDoHomeRun = False
+    # Move cam down again.
+    own_util.moveCamAbs(0, 0.1)
+    # Switch off light if it was on.
+    own_util.switchLight(False)
     # Convert the Home run images to a video and remove the images.
     stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
     globMyLog.info(stdOutAndErr)

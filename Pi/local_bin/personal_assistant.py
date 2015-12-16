@@ -499,6 +499,9 @@ def personalAssistant():
                 own_util.runShellCommandNowait('/usr/bin/mplayer /home/pi/Sources/alarm.mp3;sudo /usr/local/bin/own_gpio.py --loudspeaker off')
                 globAlarmStatus = ''  # reset alarm
                 eventHandled = True   # Indicate the event is handled.
+            if globDoHomeRun == True:
+                globDoHomeRun = False
+                eventHandled = True   # Indicate the event is handled.
             # If event is handled already here, continue to wait for the next event.
             if eventHandled == True:
                 continue
