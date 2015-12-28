@@ -52,7 +52,7 @@ def firHighpassFilter(audioBuffer, nsamples):
 
 
 def checkClaps(p1, p2, p3, p4, p5):
-    minClapRatio = 5.0
+    minClapRatio = 8.0
     # Prevent division by zero.
     p1 = max(p1, 1.0)
     p2 = max(p2, 1.0)
@@ -344,7 +344,7 @@ def speechToIntent(sttEngine):
         elif re.search('lights off$', text, re.IGNORECASE):
             intent = "light"
             value = "off"
-        elif re.search('demo$', text, re.IGNORECASE):
+        elif re.search('demonstration$', text, re.IGNORECASE):
             intent = "demo"
             value = "start"
         elif re.search('stop$', text, re.IGNORECASE):
