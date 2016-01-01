@@ -40,7 +40,7 @@ def firHighpassFilter(audioBuffer, nsamples):
 
 
 def checkClaps(p1, p2, p3, p4, p5):
-    minClapRatio = 8.0
+    minClapRatio = 10.0
     # Prevent division by zero.
     p1 = max(p1, 1.0)
     p2 = max(p2, 1.0)
