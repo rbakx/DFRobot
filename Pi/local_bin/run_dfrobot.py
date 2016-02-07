@@ -276,7 +276,7 @@ def homeRun():
                         # Make one more additional move towards the garage before turning 180 degrees.
                         own_util.move('forward', 180, 1.0, doMove)
                         compass.gotoDegreeRel(180, doMove)
-                        for i in range(0, 6):
+                        for i in range(0, 8):
                             own_util.move('backward', 140, 1.0, doMove)
                         globMyLog.info('Home found!')
                         globContinueCapture = False
