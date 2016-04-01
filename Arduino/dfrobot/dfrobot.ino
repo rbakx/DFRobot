@@ -189,9 +189,9 @@ void loop()
 
   delay(100);
   count = count + 1;
-  if (count == 72000)
+  if (count == 108000)
   {
-    // reset charge cycle every 2 hours
+    // reset charge cycle every 3 hours
     digitalWrite(RESETCHARGE,HIGH);
     delay(2000);
     digitalWrite(RESETCHARGE,LOW);
