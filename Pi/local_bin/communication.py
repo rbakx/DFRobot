@@ -376,7 +376,7 @@ def socketClient():
     global globCmd
     s = socket.socket()         # Create a socket object.
     port = 12345                # Reserve a port for your service.
-    s.bind(('localhost', port)) # Bind to localhost and port.
+    s.bind(('', port)) # Bind to any host and specific port.
     # Set socket timeout to prevent the s.accept() call from blocking.
     # Instead it will generate a 'timed out' exception.
     s.settimeout(1.0)
