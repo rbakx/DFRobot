@@ -350,6 +350,9 @@ def speechToIntent(sttEngine):
         elif re.search('stop$', text, re.IGNORECASE):
             intent = "demo"
             value = "stop"
+        elif re.search('go home$', text, re.IGNORECASE):
+            intent = "home"
+            value = "start"
         elif re.search('news$', text, re.IGNORECASE):
             intent = "news"
             value = "world"
@@ -555,6 +558,15 @@ def personalAssistant():
                 else:
                     tmpCmd = 'demo-stop'
                     response = 'demo stopped'
+                    globDoHomeRun = False
+            elif intent == "home":
+                if value == "start":
+                    tmpCmd = 'home-start'
+                    response = 'going home'
+                    globDoHomeRun = True
+                else:
+                    tmpCmd = 'home-stop'
+                    response = 'home stopped'
                     globDoHomeRun = False
             elif intent == "news":
                 if value == "world":
