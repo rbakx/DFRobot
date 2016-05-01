@@ -1,10 +1,6 @@
 #!/usr/bin/python
-# This script is created to be able to run it as root,
-# which is required to control the GPIO pins.
-import sys
-import argparse
-import RPi.GPIO as GPIO ## Import GPIO library
-import time
+import RPi.GPIO as GPIO                    # Import GPIO library
+import time                                # Import time library
 
 
 # Gets the distance in cm using the ultrasonic sensor.
@@ -50,27 +46,13 @@ def getUsSensorDistance(UsPinTrig, UsPinEcho):
 # This warning occurs when multiple GPIO scripts are running and also when one GPIO script is called
 # multiple times. Because this script runs multiple times we disable the warning.
 GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BCM) # Use board pin numbering
-# Handle arguments.
-parser = argparse.ArgumentParser()
-parser.add_argument('--loudspeaker', choices = ['on','off'])
-parser.add_argument('--us_sensor', choices = ['1','2','3','4'])
-args = parser.parse_args()
-
-# Loudspeaker GPIO pin to switch loudspeaker on or off.
-GPIO.setup(4, GPIO.OUT) # Setup GPIO Pin 4 to OUT.
-if args.loudspeaker == 'on':
-    GPIO.output(4,True) # Turn on loudspeaker.
-elif args.loudspeaker == 'off':
-    GPIO.output(4,False) # Turn off loudspeaker.
-elif args.us_sensor == '1':
-    # Assign pins of ultrasonic sensor #1
+GPIO.setmode(GPIO.BCM)                     # Use board pin numbering
+while True:
     US_PIN_TRIG = 12
     US_PIN_ECHO = 6
     distance = getUsSensorDistance(US_PIN_TRIG, US_PIN_ECHO)
-    print distance
-
-
+    print "distance =", distance
+    time.sleep(0.5)
 
 
 

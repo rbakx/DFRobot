@@ -6,15 +6,20 @@
 # Global variabele which will contain the message received from the socket.
 # A global variabele is used as bash functions cannot return values.
 globSocketMessageReceived=""
-# Function to send a socket message to the server and receive the reply.
+# Function to send a udp socket message to the server and receive the reply.
 function socketSendAndReceive {
     # Open socket and redirect to filedescriptor #3
-    exec 3<>/dev/tcp/localhost/12345
+    exec 3<>/dev/udp/localhost/12345
     # Send message (first parameter) to socket.
     echo -n ${1} > /dev/null 2>&1 >&3
     # Read message back from socket into globSocketMessageReceived, with a timeout of 0.5 second.
-    # This timeout must be smaller than the delay in the server loop.
-    read -r -t 0.5 globSocketMessageReceived <&3
+    # This timeout is needed otherwise this script can hang!
+    # The timeout must be smaller than the delay in the server loop.
+    # With UDP sockets the below read command does not seem to work (times out), so we use dd instead.
+    #read -r -t 0.5 globSocketMessageReceived <&3
+    # The dd command below waits until a message is received. To create a timeout we use the 'timeout' function.
+    # 'count' should be '1' to wait for one message.
+    globSocketMessageReceived=$(timeout 0.5s dd count=1 <&3 2> /dev/null)
     if [ -z "$globSocketMessageReceived" ]
     then
         globSocketMessageReceived="no reply received!"

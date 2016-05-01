@@ -369,28 +369,29 @@ def receiveWhatsAppMsg():
     return msg
 
 
-def socketClient():
+def socketServer():
     global globSocketMsgIn, globSocketMsgInAvailable, globSocketMsgInAvailableLock
     global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
     global globInteractive, globDoHomeRun
     global globCmd
-    s = socket.socket()         # Create a socket object.
+    # We use a UDP socket here as we send small control commands and real time data.
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)         # Create a socket object.
     port = 12345                # Reserve a port for your service.
     s.bind(('', port)) # Bind to any host and specific port.
     # Set socket timeout to prevent the s.accept() call from blocking.
     # Instead it will generate a 'timed out' exception.
     s.settimeout(1.0)
-    s.listen(5)                 # Now wait for client connection.
     interactiveInactivityCount = 0
     while True:
         try:
             # Establish connection.
-            # We have set s.settimeout(...) which means s.accept() will generate a 'timed out' exception
-            # when there is no connection within the timeout time.
+            # We have set s.settimeout(...) which means s.recvfrom() will generate a 'timed out' exception
+            # when there is no message received within the timeout time.
             # This way we can still do some processing.
-            c = None
+            msg = None
             try:
-                c, addr = s.accept()    # Establish connection with client.
+                # Receive message.
+                msg, addr = s.recvfrom(1024)  # Will receive any message with a maximum length of 1024 characters.
             except Exception,e:
                 pass
             
@@ -401,18 +402,16 @@ def socketClient():
                 # for example continue motion detection.
                 globInteractive = False
             
-            if c is None:
-                # No connection, continue with next iteration.
+            if not msg:
+                # No message received, continue with next iteration.
                 continue
-        
-            # Connection is made, so interactive mode is active,
+                
+            # Message is received, so interactive mode is active,
             # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
             globInteractive = True
             # Reset interactive inacivity count because there is activity.
             interactiveInactivityCount = 0
 
-            # Receive message.
-            msg = c.recv(1024)      # Will receive any message with a maximum length of 1024 characters.
             # Keep critical section as short as possible.
             globSocketMsgInAvailableLock.acquire()
             globSocketMsgIn = msg
@@ -425,10 +424,13 @@ def socketClient():
             msg = receiveSocketMsg()
             # First handle the commands which change the run mode. The mode is set here in this thread
             # so the mode can be changed or interrupted at any time in the other thread.
+            # For all messages received send a message back as the other side might expect this.
             if re.search('home-start', msg, re.IGNORECASE):
+                sendSocketMsg('ok')
                 globCmd = 'home-start'
                 globDoHomeRun = True
             elif re.search('home-stop', msg, re.IGNORECASE):
+                sendSocketMsg('ok')
                 globCmd = 'home-stop'
                 globDoHomeRun = False
             elif re.search('status', msg, re.IGNORECASE):
@@ -439,8 +441,12 @@ def socketClient():
                     chargingStr = 'not charging'
                 statusForWebPage = '<br>' + own_util.getWifiStatus() + '<br>' + 'uptime: ' + own_util.getUptime() + '<br>' + 'battery: ' + str(own_util.getBatteryLevel()) + ' (154 = 6V), ' + chargingStr
                 sendSocketMsg(statusForWebPage)
+            elif re.search('get_distance', msg, re.IGNORECASE):
+                distance = own_util.runShellCommandWait('sudo /usr/local/bin/own_gpio.py --us_sensor 1')
+                sendSocketMsg(distance)
             else:
                 # Handle the interactive commands which take at most a few seconds and do not change the mode.
+                sendSocketMsg('ok')
                 m = re.search('(.*)', msg, re.IGNORECASE)
                 if m is not None:
                     globCmd = m.group(1)
@@ -456,23 +462,23 @@ def socketClient():
                 globSocketMsgOutAvailable = False
                 globSocketMsgOutAvailableLock.release()
                 # Add new line as other side will stop reading after a newline.
-                c.send(msg + '\n')
+                s.sendto(msg + '\n', addr)
             else:
                 globSocketMsgOutAvailableLock.release()
     
         except Exception,e:
-            logging.getLogger("MyLog").info('socketClient exception: ' + str(e))
+            logging.getLogger("MyLog").info('socketServer exception: ' + str(e))
 
 
-def startSocketClient():
+def startSocketServer():
     global globSocketMsgIn, globSocketMsgInAvailable, globSocketMsgInAvailableLock
     global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
-    logging.getLogger("MyLog").info('going to start socketClient')
+    logging.getLogger("MyLog").info('going to start socketServer')
     globSocketMsgInAvailableLock = thread.allocate_lock()
     globSocketMsgOutAvailableLock = thread.allocate_lock()
     globSocketMsgInAvailable = False
     globSocketMsgOutAvailable = False
-    thread.start_new_thread(socketClient, ())
+    thread.start_new_thread(socketServer, ())
 
 
 def receiveSocketMsg():

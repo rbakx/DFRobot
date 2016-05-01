@@ -579,8 +579,8 @@ globMyLog.info('START LOG  *****')
 communication.startWhatsAppClient()
 communication.sendWhatsAppMsg('I am up and running!')
 
-# Start Socket client.
-communication.startSocketClient()
+# Start Socket server.
+communication.startSocketServer()
 
 # Start personal assistant.
 personal_assistant.startPersonalAssistant()
@@ -591,7 +591,7 @@ while True:
     # Catch exceptions and log them.
     try:
         # Short sleep to preempt this thread. Otherwise this thread will be dominating and other threads
-        # like the socketClient thread will not run at regular times.
+        # like the socketServer thread will not run at regular times.
         time.sleep(0.001)
         
         if communication.globInteractive == True or personal_assistant.globInteractive == True:
