@@ -34,6 +34,11 @@ def getNofConnections():
     return int(stdOutAndErr)
 
 
+# Reboot the system.
+def ownReboot():
+    runShellCommandNowait('sudo reboot')
+
+
 def move(direction, speed, delay, doMove):
     if doMove:
         if direction == 'forward':

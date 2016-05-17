@@ -685,7 +685,7 @@ while True:
                     # Demo Home run, no upload of video.
                     globMyLog.info('going to start Home run')
                     if doPrint:
-                        print 'Going to start Home run'
+                        print 'going to start Home run'
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start stream')
@@ -694,7 +694,12 @@ while True:
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
-
+                elif cmdList[0] == 'reboot':
+                    globMyLog.info('reboot command received, going to reboot')
+                    if doPrint:
+                        print 'reboot command received, going to reboot'
+                    own_util.ownReboot()
+                    
                 # Command handled, so make empty.
                 communication.globCmd = ''
                 personal_assistant.globCmd = ''

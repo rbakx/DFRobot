@@ -80,6 +80,10 @@ function handle_command {
         globStatus=$globSocketMessageReceived
         # Indicate to refresh the status frame.
         do_refresh_frame=true
+    else
+        # All other commands given in the text box, just send it to the socket server.
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1}"
     fi
 }
 
@@ -101,11 +105,11 @@ then
 
     # Now $POST_STRING contains 'cmd=<value>' where 'cmd' and '<value>' correspond with the
     # 'name' and 'value' attribute of the button pressed in the client side html file.
-    # Filter out <value> and store it in $COMMAND.
+    # <value> contains a command and possibly a parameter, separated by a dot. For example 'cam-move.30'.
+    # Filter out the command and parameter and store it in $COMMAND and $PARAMETER respectively.
     COMMAND_PLUS_PARAMETER="$(echo $POST_STRING | sed -n 's/^.*cmd=\([^ ]*\).*$/\1/p')"
     COMMAND="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/\([^.]*\).*$/\1/p')"
     PARAMETER="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/[^.]*\.\(.*$\)/\1/p')"
-
     # Call command handler.
     handle_command $COMMAND $PARAMETER
 fi
