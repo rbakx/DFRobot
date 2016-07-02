@@ -12,10 +12,12 @@ import own_util
 import personal_assistant
 import secret
 
+from yowsup.layers.interface                            import YowInterfaceLayer, ProtocolEntityCallback
+from yowsup.stacks                                      import  YowStackBuilder
+from yowsup.layers.auth                                 import AuthError
 from yowsup.layers                                      import YowLayerEvent
 from yowsup.layers.network                              import YowNetworkLayer
-from yowsup.layers.interface                            import YowInterfaceLayer, ProtocolEntityCallback
-from yowsup.layers.auth                                 import YowAuthenticationProtocolLayer, AuthError
+from yowsup.env                                         import YowsupEnv
 from yowsup.layers.protocol_media.protocolentities      import *
 from yowsup.layers.protocol_media.mediauploader         import MediaUploader
 from yowsup.layers.protocol_messages.protocolentities   import TextMessageProtocolEntity
@@ -25,11 +27,7 @@ from yowsup.layers.protocol_messages                    import YowMessagesProtoc
 from yowsup.layers.protocol_receipts                    import YowReceiptProtocolLayer
 from yowsup.layers.protocol_acks                        import YowAckProtocolLayer
 from yowsup.layers.protocol_presence.protocolentities   import *
-from yowsup.layers.coder                                import YowCoderLayer
-from yowsup.layers.axolotl                              import YowAxolotlLayer
-from yowsup.common                                      import YowConstants
-from yowsup.stacks                                      import YowStack, YOWSUP_CORE_LAYERS, YOWSUP_PROTOCOL_LAYERS_FULL
-from yowsup                                             import env
+
 
 # Global variables
 globInteractive = False
@@ -94,7 +92,6 @@ class SendReceiveLayer(YowInterfaceLayer):
     def onMessage(self, messageProtocolEntity):
         global globWhatsAppMsgIn, globWhatsAppMsgInAvailable, globWhatsAppMsgInAvailableLock
         #send receipt otherwise we keep receiving the same message over and over
-        
         # Use 'hasattr' to protect against video and audio messages, which do not have a 'getBody' attribute.
         if hasattr(messageProtocolEntity, 'getBody'):
             # Keep critical section as short as possible.
@@ -201,14 +198,14 @@ def whatsAppClient():
     global globWhatsAppMsgOut, globWhatsAppMsgOutType, globIWhatsAppImgOut, globWhatsAppMsgOutAvailable, globWhatsAppMsgOutAvailableLock
     global globDoMotionDetection, globWhatsAppSendPicture
 
-    # YowAxolotlLayer added to prevent 'Unimplemented notification type "encrypt"' crash.
-    layers=(SendReceiveLayer,)+(YOWSUP_PROTOCOL_LAYERS_FULL,YowAxolotlLayer)+YOWSUP_CORE_LAYERS
-    
-    stack = YowStack(layers)
-    stack.setProp(YowAuthenticationProtocolLayer.PROP_CREDENTIALS, credentials())         #setting credentials
-    stack.setProp(YowNetworkLayer.PROP_ENDPOINT, YowConstants.ENDPOINTS[0])    #whatsapp server address
-    stack.setProp(YowCoderLayer.PROP_DOMAIN, YowConstants.DOMAIN)
-    stack.setProp(YowCoderLayer.PROP_RESOURCE, env.CURRENT_ENV.getResource())          #info about us as WhatsApp client
+    # Stack building taken from yowsup/demos/echoclient code.
+    stackBuilder = YowStackBuilder()
+    stack = stackBuilder\
+        .pushDefaultLayers(True)\
+        .push(SendReceiveLayer)\
+        .build()
+
+    stack.setCredentials(credentials())
     stack.broadcastEvent(YowLayerEvent(YowNetworkLayer.EVENT_STATE_CONNECT))   #sending the connect signal
     while globWhatsAppContinue:
         try:
