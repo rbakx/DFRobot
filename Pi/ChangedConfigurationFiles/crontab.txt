@@ -1,0 +1,2 @@
+@reboot /usr/local/bin/run_dfrobot.py --log="/home/pi/log/dfrobot_runlog.txt" &
+0 23 * * * sudo shutdown -r now
