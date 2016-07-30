@@ -80,6 +80,11 @@ function handle_command {
         globStatus=$globSocketMessageReceived
         # Indicate to refresh the status frame.
         do_refresh_frame=true
+    elif [ "${1}" == "reboot" ]
+    then
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        # going to reboot. Do it right here as other threads might be corrupt.
+        sudo reboot
     else
         # All other commands given in the text box, just send it to the socket server.
         echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
@@ -155,5 +160,3 @@ else
         echo -e ${line/feedbackstring/$globStatus}
     done < ${1}
 fi
-
-

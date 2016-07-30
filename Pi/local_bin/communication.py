@@ -48,7 +48,7 @@ class MediaDiscover(object):
     EXT_IMAGE=['jpg','png']
     EXT_AUDIO=['mp3','wav','aac','wma','ogg','oga']
     EXT_VIDEO=['mp4']
-    
+
     @staticmethod
     def getMediaType(path):
         for ext in MediaDiscover.EXT_IMAGE:
@@ -69,16 +69,16 @@ class SendReceiveLayer(YowInterfaceLayer):
     # Custom events which can be triggered from outside with stack.broadcastEvent().
     EVENT_SEND_MESSAGE = "send_message"
     EVENT_DISCONNECT = "disconnect"
-    
+
     def __init__(self):
         super(SendReceiveLayer,self).__init__()
         self.MEDIA_TYPE=None
         self.ackQueue=[]
-    
+
     def disconnect(self,result):
         self.broadcastEvent(YowLayerEvent(YowNetworkLayer.EVENT_STATE_DISCONNECT))
         raise Disconnect(result)
-    
+
     # Handle custom events.
     def onEvent(self, layerEvent):
         # Event to send a message.
@@ -102,18 +102,18 @@ class SendReceiveLayer(YowInterfaceLayer):
 
             receipt = OutgoingReceiptProtocolEntity(messageProtocolEntity.getId(), messageProtocolEntity.getFrom(), 'read', messageProtocolEntity.getParticipant())
             self.toLower(receipt)
-    
+
     @ProtocolEntityCallback("receipt")
     def onReceipt(self, entity):
         ack = OutgoingAckProtocolEntity(entity.getId(), "receipt", entity.getType(), entity.getFrom())
         self.toLower(ack)
-   
+
     @ProtocolEntityCallback('success')
     def onSuccess(self,entity):
         entity = AvailablePresenceProtocolEntity()
         self.toLower(entity)
         #self.main()
-    
+
     @ProtocolEntityCallback('ack')
     def onAck(self,entity):
         if entity.getId() in self.ackQueue:
@@ -137,7 +137,7 @@ class SendReceiveLayer(YowInterfaceLayer):
 
     def onRequestUploadError(self,jid,path,errorRequestUploadIqProtocolEntity,requestUploadIqProtocolEntity):
         self.disconnect("ERROR REQUEST")
-    
+
     def onUploadSuccess(self,filePath,url,jid,ip=None,caption=None):
         if self.MEDIA_TYPE=="image":
             self.doSendImage(filePath,url,jid,ip,caption)
@@ -148,7 +148,7 @@ class SendReceiveLayer(YowInterfaceLayer):
 
     def onUploadError(self,filePath,jid,url):
         self.disconnect("ERROR UPLOAD")
-    
+
     def onUploadProgress(self,filePath,jid,url,progress):
         #print(progress)
         pass
@@ -156,15 +156,15 @@ class SendReceiveLayer(YowInterfaceLayer):
     def doSendImage(self,filePath,url,to,ip=None, caption=None):
         entity=ImageDownloadableMediaMessageProtocolEntity.fromFilePath(filePath,url,ip,to,caption=caption)
         self.toLower(entity)
-    
+
     def doSendVideo(self,filePath,url,to,ip=None):
         entity=DownloadableMediaMessageProtocolEntity.fromFilePath(filePath,url,"video",ip,to)
         self.toLower(entity)
-    
+
     def doSendAudio(self,filePath,url,to,ip=None):
         entity=DownloadableMediaMessageProtocolEntity.fromFilePath(filePath,url,"audio",ip,to)
         self.toLower(entity)
-    
+
     def main(self):
         for target in self.getProp(self.__class__.PROP_MESSAGES,[]):
             jid,path,caption=target
@@ -295,6 +295,10 @@ def startWhatsAppClient():
     global globWhatsAppMsgIn, globWhatsAppMsgInAvailable, globWhatsAppMsgInAvailableLock
     global globWhatsAppMsgOut, globWhatsAppMsgOutAvailable, globWhatsAppMsgOutAvailableLock
     logging.getLogger("MyLog").info('going to start whatsAppClient')
+    # The delay below seems to be needed in case startWhatsAppClient() is called right after a reboot.
+    # In that case without a delay the whatsAppClient does often not connect, probably because the network
+    # is not operational yet.
+    time.sleep(3.0)
     globWhatsAppMsgInAvailableLock = thread.allocate_lock()
     globWhatsAppMsgOutAvailableLock = thread.allocate_lock()
     globWhatsAppContinue = True
@@ -391,18 +395,18 @@ def socketServer():
                 msg, addr = s.recvfrom(1024)  # Will receive any message with a maximum length of 1024 characters.
             except Exception,e:
                 pass
-            
+
             # Increase interactive inactivity count.
             interactiveInactivityCount = interactiveInactivityCount + 1
             if interactiveInactivityCount > 60:
                 # Interactive is inactive, set globInteractive to False so the server can take appropriate action,
                 # for example continue motion detection.
                 globInteractive = False
-            
+
             if not msg:
                 # No message received, continue with next iteration.
                 continue
-                
+
             # Message is received, so interactive mode is active,
             # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
             globInteractive = True
@@ -414,7 +418,7 @@ def socketServer():
             globSocketMsgIn = msg
             globSocketMsgInAvailable = True
             globSocketMsgInAvailableLock.release()
-            
+
             # Handle messages.
             # receiveSocketMsg() which has a locking mechanism is used to handle the message.
             # Running in this thread this would not be needed but it might be in the future.
@@ -462,7 +466,7 @@ def socketServer():
                 s.sendto(msg + '\n', addr)
             else:
                 globSocketMsgOutAvailableLock.release()
-    
+
         except Exception,e:
             logging.getLogger("MyLog").info('socketServer exception: ' + str(e))
 

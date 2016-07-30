@@ -60,7 +60,8 @@ logFilePath = ''
 
 def getNewImage():
     global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
-    
+    global globBrightness
+
     while globContinueCapture == True:
         globBytes+=globStream.read(1024)
         a = globBytes.find('\xff\xd8')
@@ -68,7 +69,7 @@ def getNewImage():
         if a!=-1 and b!=-1:
             jpg = globBytes[a:b+2]
             globBytes= globBytes[b+2:]
-            
+
             img = cv2.imdecode(np.fromstring(jpg, dtype=np.uint8),cv2.CV_LOAD_IMAGE_COLOR)
             # Get average brightness of hsv image by averaging the 'v' (value or brightness) bytes.
             img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -88,7 +89,7 @@ def getNewImage():
 def homeRun():
     global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
     global globBrightness
-    
+
     globStream=urllib.urlopen('http://@localhost:44445/?action=stream')
     globBytes=''
     globNewImageAvailable = False
@@ -99,15 +100,15 @@ def homeRun():
     correctApproachAngle = False
     correction = 0
     imgCount = 0
-    
+
     # Remove tmp_img and tmp_tmp_img files to be sure no tmp images are left from a previous run.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
     globMyLog.info(stdOutAndErr)
-    
+
     # Start with cam down.
     own_util.moveCamAbs(0, 0.1)
     # Switch on light if needed
-    if globBrightness < 100:
+    if globBrightness < 60:
         own_util.switchLight(True)
 
     while globContinueCapture == True and (communication.globDoHomeRun == True or personal_assistant.globDoHomeRun == True):
@@ -148,14 +149,14 @@ def homeRun():
             # Filter by Inertia
             params.filterByInertia = False
             params.minInertiaRatio = 0.01
-            
+
             #Filter by distance between blobs
             #params.minDistBetweenBlobs = 100
-            
+
             # Detect blobs.
             detector = cv2.SimpleBlobDetector(params)
             blobs = detector.detect(img_gray)
-            
+
             # Sort blobs on horizontal position and check if they are valid.
             sortedBlobs = sorted(blobs, key=lambda x: x.pt[0], reverse=False)
             blobLeft = None
@@ -296,16 +297,16 @@ def homeRun():
                 x = blob.pt[0]
                 y = blob.pt[1]
                 cv2.circle(img, (int(x), int(y)), int(blob.size), (0, 255, 0), 2)
-            
+
             # Write images with name like 'tmp_img000042.jpg'.
             # Use leading zeros to make sure order is correct when using shell filename expansion.
             cv2.imwrite('/home/pi/DFRobotUploads/tmp_img' + str(imgCount).zfill(6) + '.jpg', img)
-            
+
             if doShow:
                 # Show keypoints
                 cv2.imshow("Keypoints", img)
                 cv2.waitKey(100)
-            
+
             # Increase imgCount with a maximum for protection.
             imgCount = (imgCount + 1) % (FpsLq * 300)
 
@@ -335,20 +336,20 @@ def homeRun():
 
 def captureAndMotionDetection():
     global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
-    
+
     globStream=urllib.urlopen('http://@localhost:44445/?action=stream')
     globBytes=''
     globNewImageAvailable = False
     globNewImageAvailableLock = thread.allocate_lock()
     globContinueCapture = True
     thread.start_new_thread(getNewImage, ())
-    
+
     img = img_gray = img_gray_prev = None
     imgCount = 0
     motionDetected = prevMotionDetected = False
     noOfConsecutiveMotions = 0
     firstImageIndex = 0
-    
+
     # Remove tmp_img and tmp_tmp_img files to be sure no tmp images are left from a previous run.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
     globMyLog.info(stdOutAndErr)
@@ -361,14 +362,14 @@ def captureAndMotionDetection():
             globMyLog.info('stopping capture and motion detection because the interactive mode is active')
             globContinueCapture = False
             return False
-    
+
         # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
         if newImageAvailable:
             img = globImg
             globNewImageAvailableLock.release()
-            
+
             # Check if whatsAppClient thread is still running and restart if needed.
             communication.checkWhatsAppClient()
             if communication.globWhatsAppSendPicture == True:
@@ -377,7 +378,7 @@ def captureAndMotionDetection():
                 communication.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'here is your picture')
                 # Not needed to lock here as it is ok to miss a 'send picture' command when they come in too fast.
                 communication.globWhatsAppSendPicture = False
-        
+
             # If globDoMotionDetection == False, then only capture images for sending pictures if required.
             if communication.globDoMotionDetection == False:
                 if logCount == 0:
@@ -402,12 +403,12 @@ def captureAndMotionDetection():
                 img_gray_prev = img_gray.copy()
             img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
             img_gray = cv2.GaussianBlur(img_gray, (21, 21), 0)
-            
+
             if img_gray_prev is not None:
                 img_gray_diff = cv2.absdiff(img_gray, img_gray_prev)
                 img_bw_diff = cv2.threshold(img_gray_diff, GrayLevelDifferenceTreshold, 255, cv2.THRESH_BINARY)[1]
                 (cnts, _) = cv2.findContours(img_bw_diff.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            
+
                 if doPrint:
                     print 'number of contours:', len(cnts)
 
@@ -451,12 +452,12 @@ def captureAndMotionDetection():
                         else:
                             # Reset, images with motion have to be in sequence.
                             noOfConsecutiveMotions = 0
-                
+
             # Write images with name like 'tmp_img000042.jpg'.
             # Use leading zeros to make sure order is correct when using shell filename expansion.
             firstImageName = '/home/pi/DFRobotUploads/tmp_tmp_img' + str(imgCount).zfill(6) + '.jpg'
             cv2.imwrite(firstImageName, img)
-                
+
             if motionDetected == True:
                 # Motion is detected,
                 # now acquire MotionDetectionBufferLength - MotionDetectionBufferOffset new images.
@@ -490,7 +491,7 @@ def captureAndMotionDetection():
 
             # imgCount keeps position in circular buffer.
             imgCount = (imgCount + 1) % MotionDetectionBufferLength
-            
+
             # Ready with this image. Make globNewImageAvailable false to make sure a new image is taken.
             # Keep critical section as short as possible.
             globNewImageAvailableLock.acquire()
@@ -531,7 +532,7 @@ def createMyLog(path):
     global globMyLog
     globMyLog = logging.getLogger("MyLog")
     globMyLog.setLevel(logging.INFO)
-    
+
     # add a rotating handler
     FORMAT = '%(asctime)-15s %(levelname)-6s %(message)s'
     DATE_FORMAT = '%b %d %H:%M:%S'
@@ -539,7 +540,7 @@ def createMyLog(path):
     handler = RotatingFileHandler(path, maxBytes=1000000, backupCount=0)
     handler.setFormatter(formatter)
     globMyLog.addHandler(handler)
-                                  
+
 # Main script.
 # This script can run the robot in different modes:
 # Default run:
@@ -593,7 +594,7 @@ while True:
         # Short sleep to preempt this thread. Otherwise this thread will be dominating and other threads
         # like the socketServer thread will not run at regular times.
         time.sleep(0.001)
-        
+
         if communication.globInteractive == True or personal_assistant.globInteractive == True:
             # Intearctive mode
             if modePrevious != 'INTERACTIVE':
@@ -676,7 +677,7 @@ while True:
                     own_util.switchLight(False)
                 elif cmdList[0] == 'demo-start':
                     # Switch on light if needed
-                    if globBrightness < 100:
+                    if globBrightness < 60:
                         own_util.switchLight(True)
                     own_util.move('forward', 200, 1.0, doMove)
                     own_util.move('forward', 200, 1.0, doMove)
@@ -694,16 +695,17 @@ while True:
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
-                elif cmdList[0] == 'reboot':
-                    globMyLog.info('reboot command received, going to reboot')
+                elif cmdList[0] == 'whatsapp':
+                    globMyLog.info('whatsapp command received, going to restart whatsapp')
                     if doPrint:
-                        print 'reboot command received, going to reboot'
-                    own_util.ownReboot()
-                    
+                        print 'whatsapp command received, going to restart whatsapp'
+                    communication.stopWhatsAppClient()
+                    communication.startWhatsAppClient()
+
                 # Command handled, so make empty.
                 communication.globCmd = ''
                 personal_assistant.globCmd = ''
-    
+
         else:
             # Default run mode
             if modePrevious != 'DEFAULTRUN':
@@ -711,7 +713,7 @@ while True:
                     print 'going to start Default run'
                 globMyLog.info('going to start Default run')
                 modePrevious = 'DEFAULTRUN'
-            
+
             if streamStarted == False:
                 # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                 stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
@@ -720,12 +722,12 @@ while True:
                 # Delay to give stream time to start up and camera to stabilize.
                 time.sleep(5)
                 streamStarted = True
-    
+
             globMyLog.info('going to call captureAndMotionDetection()')
             # Call captureAndMotionDetection(). This function returns with True when motion is detected
             # and dfrobot_pivid_motion.avi is created. It returns false when the interactive mode is active.
             motionDetected = captureAndMotionDetection()
-            
+
             if motionDetected:
                 if doPrint:
                     print 'motion detected, going to upload to Google Drive'
@@ -743,5 +745,3 @@ while True:
     except Exception,e:
         globMyLog.info('run_dfrobot exception: ' + str(e))
         raise
-
-
