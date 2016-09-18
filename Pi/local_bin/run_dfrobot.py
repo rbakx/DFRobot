@@ -18,7 +18,6 @@ import personal_assistant
 import own_util
 
 # General constants.
-SendTextOrImageToWhatsApp = 'Image'  # Fill in 'Text' or 'Image'.
 ImgWidth = 800
 ImgHeight = 600
 FpsLq = 2
@@ -327,7 +326,7 @@ def homeRun():
     # Switch off light if it was on.
     own_util.switchLight(False)
     # Convert the Home run images to a video and remove the images.
-    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi')
+    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_video.avi')
     globMyLog.info(stdOutAndErr)
     # Remove tmp_img and tmp_tmp_img files.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
@@ -370,14 +369,13 @@ def captureAndMotionDetection():
             img = globImg
             globNewImageAvailableLock.release()
 
-            # Check if whatsAppClient thread is still running and restart if needed.
-            communication.checkWhatsAppClient()
-            if communication.globWhatsAppSendPicture == True:
-                # Save img to latest_img.jpg and send it with WhatsApp.
+            # Check if picture has to be sent to Telegram.
+            if communication.globTelegramSendPicture == True:
+                # Save img to latest_img.jpg and send it with Telegram.
                 cv2.imwrite('/home/pi/DFRobotUploads/latest_img.jpg', img)
-                communication.sendWhatsAppImg('/home/pi/DFRobotUploads/latest_img.jpg', 'here is your picture')
+                communication.sendTelegramImg('/home/pi/DFRobotUploads/latest_img.jpg', 'Here is your picture!')
                 # Not needed to lock here as it is ok to miss a 'send picture' command when they come in too fast.
-                communication.globWhatsAppSendPicture = False
+                communication.globTelegramSendPicture = False
 
             # If globDoMotionDetection == False, then only capture images for sending pictures if required.
             if communication.globDoMotionDetection == False:
@@ -463,14 +461,12 @@ def captureAndMotionDetection():
                 # now acquire MotionDetectionBufferLength - MotionDetectionBufferOffset new images.
                 # First determine where we are in the circular buffer.
                 if prevMotionDetected == False and motionDetected == True:
-                    # Send first motion image or text to WhatsApp. Do it here so it will arrive fast!
-                    if doPrint:
-                        print 'motion detected, going to send message to WhatsApp'
-                    globMyLog.info('motion detected, going to send message to WhatsApp')
-                    if SendTextOrImageToWhatsApp == 'Text':
-                        communication.sendWhatsAppMsg('Motion detected!')
-                    else:
-                        communication.sendWhatsAppImg(firstImageName, 'Motion detected!')
+                    # Send  motion image or text to Telegram. Do it here so it will arrive fast!
+                    #if doPrint:
+                    #    print 'motion detected, going to send motion picture to Telegram'
+                    #globMyLog.info('motion detected, going to send motion picture to Telegram')
+                    # Line below commented out, motion video is sent instead.
+                    #communication.sendTelegramImg(firstImageName, 'Motion detected!')
 
                     firstImageIndex = imgCount
                     extraImgCount = 0
@@ -521,7 +517,7 @@ def captureAndMotionDetection():
         except IOError:
             pass
     # Motion detection images are shifted now. Convert the images to a video and remove the images.
-    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_pivid_motion.avi')
+    stdOutAndErr = own_util.runShellCommandWait('mencoder mf:///home/pi/DFRobotUploads/tmp_img*.jpg -mf w=' + str(ImgWidth) + ':h=' + str(ImgHeight) + ':fps=' + str(FpsLq) + ':type=jpg -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o /home/pi/DFRobotUploads/dfrobot_video.avi')
     globMyLog.info(stdOutAndErr)
     # Remove tmp_img and tmp_tmp_img files.
     stdOutAndErr = own_util.runShellCommandWait('rm -f /home/pi/DFRobotUploads/tmp_*img*')
@@ -544,12 +540,12 @@ def createMyLog(path):
 # Main script.
 # This script can run the robot in different modes:
 # Default run:
-#   The robot does motion detection and uploads a video to Google Drive when motion is detected.
+#   The robot does motion detection and sends a motion video to Telegram when motion is detected.
 #   Once every hour the robot drives out of its garage, makes an exploratory round
 #   and returns to the garage where it makes connection with the charging station.
-#   This video is also uploaded to Google Drive.
+#   This video is also sent to Telegram.
 # Home run:
-#   The robot finds and drives back to the garage where it makes connection with the charging station.
+#   The robot drives back to the garage where it makes connection with the charging station.
 
 # Handle arguments.
 parser = argparse.ArgumentParser()
@@ -576,9 +572,9 @@ if args.nomove:
 createMyLog(logFilePath)
 globMyLog.info('START LOG  *****')
 
-# Start WhatsApp client.
-communication.startWhatsAppClient()
-communication.sendWhatsAppMsg('I am up and running!')
+# Start Telegram client.
+communication.startTelegramClient()
+communication.sendTelegramMsg('I am up and running!')
 
 # Start Socket server.
 communication.startSocketServer()
@@ -640,16 +636,17 @@ while True:
                     globMyLog.info('going to start capture http MJPEG stream')
                     if doPrint:
                         print 'going to start capture http MJPEG stream'
-                    own_util.runShellCommandNowait('cvlc http://localhost:44445/?action=stream --sout \'#standard{mux=ts,dst=/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4,access=file}\' --run-time=60 vlc://quit')
+                    # Command below is commented out but left here for reference.
+                    #own_util.runShellCommandNowait('cvlc http://localhost:44445/?action=stream --sout \'#transcode{vcodec=h264,vb=0,scale=0,acodec=mp3,ab=128,channels=2,samplerate=44100}:file{dst=/home/pi/DFRobotUploads/dfrobot_video.mp4}\' --run-time=60 vlc://quit')
+                    own_util.runShellCommandNowait('cvlc http://localhost:44445/?action=stream --sout=file/avi:/\'home/pi/DFRobotUploads/dfrobot_video.avi\' --run-time=60 vlc://quit')
                 elif cmdList[0] == 'capture-stop':
                     # Stop capture video from http stream.
                     globMyLog.info('going to stop capture http MJPEG stream')
                     if doPrint:
                         print 'going to stop capture http MJPEG stream'
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall vlc')
-                    # Upload and purge the video file and log file.
-                    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_man.mp4', NofHomeRunVideosToKeep)
-                    own_util.uploadAndPurge(logFilePath, 1)
+                    # Send captured video to Telegram.
+                    communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your captured video!')
                 elif cmdList[0] == 'home-start':
                     # Home run.
                     globMyLog.info('going to start Home run')
@@ -663,9 +660,8 @@ while True:
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
-                    # Upload and purge the video file and log file.
-                    own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_homerun.avi', NofHomeRunVideosToKeep)
-                    own_util.uploadAndPurge(logFilePath, 1)
+                    # Upload homerun video to Telegram.
+                    communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your homerun video!')
 
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
                     own_util.move(cmdList[0], cmdList[1], 0, doMove)
@@ -695,12 +691,6 @@ while True:
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
-                elif cmdList[0] == 'whatsapp':
-                    globMyLog.info('whatsapp command received, going to restart whatsapp')
-                    if doPrint:
-                        print 'whatsapp command received, going to restart whatsapp'
-                    communication.stopWhatsAppClient()
-                    communication.startWhatsAppClient()
 
                 # Command handled, so make empty.
                 communication.globCmd = ''
@@ -725,16 +715,15 @@ while True:
 
             globMyLog.info('going to call captureAndMotionDetection()')
             # Call captureAndMotionDetection(). This function returns with True when motion is detected
-            # and dfrobot_pivid_motion.avi is created. It returns false when the interactive mode is active.
+            # and dfrobot_video.avi is created. It returns false when the interactive mode is active.
             motionDetected = captureAndMotionDetection()
 
             if motionDetected:
                 if doPrint:
-                    print 'motion detected, going to upload to Google Drive'
-                globMyLog.info('motion detected, going to upload to Google Drive')
-                # Upload and purge the video file and log file.
-                own_util.uploadAndPurge('/home/pi/DFRobotUploads/dfrobot_pivid_motion.avi', NofMotionVideosToKeep)
-                own_util.uploadAndPurge(logFilePath, 1)
+                    print 'motion detected, going to send motion video to Telegram'
+                globMyLog.info('motion detected, going to send motion video to Telegram')
+                # Send motion video to Telegram.
+                communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Motion detected!')
             else:
                 # The interactive mode is active. The current MJPEG stream can be kept running.
                 # However we indicate to (re)start a new stream at the next Default run, because
