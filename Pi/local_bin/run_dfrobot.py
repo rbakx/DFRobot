@@ -335,6 +335,7 @@ def homeRun():
 
 def captureAndMotionDetection():
     global globContinueCapture, globBytes, globStream, globImg, globNewImageAvailable, globNewImageAvailableLock
+    global globBrightness
 
     globStream=urllib.urlopen('http://@localhost:44445/?action=stream')
     globBytes=''
@@ -354,6 +355,8 @@ def captureAndMotionDetection():
     globMyLog.info(stdOutAndErr)
 
     logCount = 0
+    pictureCountDown = 0
+    lightSwitchedOn = False
     while globContinueCapture == True:
         if communication.globInteractive == True or personal_assistant.globInteractive == True:
             if doPrint:
@@ -371,11 +374,24 @@ def captureAndMotionDetection():
 
             # Check if picture has to be sent to Telegram.
             if communication.globTelegramSendPicture == True:
+                # pictureCountDown is used in case it is dark and the ligth has to be switched on.
+                # It counts down a number of images to give the camera time to settle. When pictureCountDown == 0, the picture is taken.
+                # Switch on light if needed.
+                if globBrightness < 60 and lightSwitchedOn == False:
+                    own_util.switchLight(True)
+                    lightSwitchedOn = True
+                    pictureCountDown = 10
                 # Save img to latest_img.jpg and send it with Telegram.
-                cv2.imwrite('/home/pi/DFRobotUploads/latest_img.jpg', img)
-                communication.sendTelegramImg('/home/pi/DFRobotUploads/latest_img.jpg', 'Here is your picture!')
-                # Not needed to lock here as it is ok to miss a 'send picture' command when they come in too fast.
-                communication.globTelegramSendPicture = False
+                if pictureCountDown == 0:
+                    cv2.imwrite('/home/pi/DFRobotUploads/latest_img.jpg', img)
+                    communication.sendTelegramImg('/home/pi/DFRobotUploads/latest_img.jpg', 'Here is your picture!')
+                    # Not needed to lock here as it is ok to miss a 'send picture' command when they come in too fast.
+                    communication.globTelegramSendPicture = False
+                    # Switch off light.
+                    own_util.switchLight(False)
+                    lightSwitchedOn = False
+                else:
+                    pictureCountDown = pictureCountDown - 1
 
             # If globDoMotionDetection == False, then only capture images for sending pictures if required.
             if communication.globDoMotionDetection == False:
@@ -390,103 +406,105 @@ def captureAndMotionDetection():
                 motionDetected = prevMotionDetected = False
                 noOfConsecutiveMotions = 0
                 firstImageIndex = 0
-                continue;
-            elif logCount == 1:
-                if doPrint:
-                    print 'globDoMotionDetection set to True'
-                globMyLog.info('globDoMotionDetection set to True')
-                logCount = 0
-
-            if img_gray is not None:
-                img_gray_prev = img_gray.copy()
-            img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
-            img_gray = cv2.GaussianBlur(img_gray, (21, 21), 0)
-
-            if img_gray_prev is not None:
-                img_gray_diff = cv2.absdiff(img_gray, img_gray_prev)
-                img_bw_diff = cv2.threshold(img_gray_diff, GrayLevelDifferenceTreshold, 255, cv2.THRESH_BINARY)[1]
-                (cnts, _) = cv2.findContours(img_bw_diff.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-                if doPrint:
-                    print 'number of contours:', len(cnts)
-
-                # Loop over the contours.
-                # If number of contours is too high it is not considered true motion.
-                if len(cnts) < MaxNofContours:
-                    # xLeft, xRight, yTop, yBottom will be the coordinates of the outer bounding box of all contours.
-                    xLeft = ImgWidth
-                    xRight = 0
-                    yTop = ImgHeight
-                    yBottom = 0
-                    nofValidContours = 0
-                    for c in cnts:
-                        # If the contour is too small, ignore it.
-                        if cv2.contourArea(c) > MinContourArea:
-                            # Compute the outer bounding box of all valid contours.
-                            nofValidContours = nofValidContours + 1
-                            x,y,w,h = cv2.boundingRect(c)
-                            xLeft = x if x < xLeft else xLeft
-                            xRight = x+w if x+w > xRight else xRight
-                            yTop = y if y < yTop else yTop
-                            yBottom = y+h if y+h > yBottom else yBottom
-                            if doShow:
-                                # Only with -show option draw all the contours.
-                                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                    if nofValidContours > 0:
-                        totalArea = (xRight - xLeft) * (yBottom - yTop)
-                        if doPrint:
-                            print 'total area:', totalArea
-                        if totalArea < (ImgWidth * ImgHeight) * 0.5:
-                            # Motion is detected for this image.
-                            # Consider true motion detected only after sufficient images in sequence with motion.
-                            noOfConsecutiveMotions = noOfConsecutiveMotions + 1
-                            if noOfConsecutiveMotions >= 3:
-                                if doPrint:
-                                    print '******************** MOTION DETECTED! ********************'
-                                # Draw the outer bounding box of all contours.
-                                cv2.rectangle(img, (xLeft, yTop), (xRight, yBottom), (0, 255, 255), 2)
-                                if doTestMotion == False:
-                                    motionDetected = True
-                        else:
-                            # Reset, images with motion have to be in sequence.
-                            noOfConsecutiveMotions = 0
-
-            # Write images with name like 'tmp_img000042.jpg'.
-            # Use leading zeros to make sure order is correct when using shell filename expansion.
-            firstImageName = '/home/pi/DFRobotUploads/tmp_tmp_img' + str(imgCount).zfill(6) + '.jpg'
-            cv2.imwrite(firstImageName, img)
-
-            if motionDetected == True:
-                # Motion is detected,
-                # now acquire MotionDetectionBufferLength - MotionDetectionBufferOffset new images.
-                # First determine where we are in the circular buffer.
-                if prevMotionDetected == False and motionDetected == True:
-                    # Send  motion image or text to Telegram. Do it here so it will arrive fast!
-                    #if doPrint:
-                    #    print 'motion detected, going to send motion picture to Telegram'
-                    #globMyLog.info('motion detected, going to send motion picture to Telegram')
-                    # Line below commented out, motion video is sent instead.
-                    #communication.sendTelegramImg(firstImageName, 'Motion detected!')
-
-                    firstImageIndex = imgCount
-                    extraImgCount = 0
-                    prevMotionDetected = True
-                else:
-                    extraImgCount = extraImgCount + 1
+            else:
+                # Motion detection
+                if logCount == 1:
                     if doPrint:
-                        print 'capturing extra image no:', extraImgCount
+                        print 'globDoMotionDetection set to True'
+                    globMyLog.info('globDoMotionDetection set to True')
+                    logCount = 0
 
-                    if extraImgCount == MotionDetectionBufferLength - MotionDetectionBufferOffset - 1:
-                        # All required images for this motion are captured, stop the capturing.
-                        globContinueCapture = False
+                if img_gray is not None:
+                    img_gray_prev = img_gray.copy()
+                img_gray = cv2.cvtColor(img, cv2.cv.CV_BGR2GRAY)
+                img_gray = cv2.GaussianBlur(img_gray, (21, 21), 0)
 
-            if doShow:
-                # Show motion
-                cv2.imshow("Motion", img)
-                cv2.waitKey(100)
 
-            # imgCount keeps position in circular buffer.
-            imgCount = (imgCount + 1) % MotionDetectionBufferLength
+                if img_gray_prev is not None:
+                    img_gray_diff = cv2.absdiff(img_gray, img_gray_prev)
+                    img_bw_diff = cv2.threshold(img_gray_diff, GrayLevelDifferenceTreshold, 255, cv2.THRESH_BINARY)[1]
+                    (cnts, _) = cv2.findContours(img_bw_diff.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                    if doPrint:
+                        print 'number of contours:', len(cnts)
+
+                    # Loop over the contours.
+                    # If number of contours is too high it is not considered true motion.
+                    if len(cnts) < MaxNofContours:
+                        # xLeft, xRight, yTop, yBottom will be the coordinates of the outer bounding box of all contours.
+                        xLeft = ImgWidth
+                        xRight = 0
+                        yTop = ImgHeight
+                        yBottom = 0
+                        nofValidContours = 0
+                        for c in cnts:
+                            # If the contour is too small, ignore it.
+                            if cv2.contourArea(c) > MinContourArea:
+                                # Compute the outer bounding box of all valid contours.
+                                nofValidContours = nofValidContours + 1
+                                x,y,w,h = cv2.boundingRect(c)
+                                xLeft = x if x < xLeft else xLeft
+                                xRight = x+w if x+w > xRight else xRight
+                                yTop = y if y < yTop else yTop
+                                yBottom = y+h if y+h > yBottom else yBottom
+                                if doShow:
+                                    # Only with -show option draw all the contours.
+                                    cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                        if nofValidContours > 0:
+                            totalArea = (xRight - xLeft) * (yBottom - yTop)
+                            if doPrint:
+                                print 'total area:', totalArea
+                            if totalArea < (ImgWidth * ImgHeight) * 0.5:
+                                # Motion is detected for this image.
+                                # Consider true motion detected only after sufficient images in sequence with motion.
+                                noOfConsecutiveMotions = noOfConsecutiveMotions + 1
+                                if noOfConsecutiveMotions >= 3:
+                                    if doPrint:
+                                        print '******************** MOTION DETECTED! ********************'
+                                    # Draw the outer bounding box of all contours.
+                                    cv2.rectangle(img, (xLeft, yTop), (xRight, yBottom), (0, 255, 255), 2)
+                                    if doTestMotion == False:
+                                        motionDetected = True
+                            else:
+                                # Reset, images with motion have to be in sequence.
+                                noOfConsecutiveMotions = 0
+
+                # Write images with name like 'tmp_img000042.jpg'.
+                # Use leading zeros to make sure order is correct when using shell filename expansion.
+                firstImageName = '/home/pi/DFRobotUploads/tmp_tmp_img' + str(imgCount).zfill(6) + '.jpg'
+                cv2.imwrite(firstImageName, img)
+
+                if motionDetected == True:
+                    # Motion is detected,
+                    # now acquire MotionDetectionBufferLength - MotionDetectionBufferOffset new images.
+                    # First determine where we are in the circular buffer.
+                    if prevMotionDetected == False and motionDetected == True:
+                        # Send  motion image or text to Telegram. Do it here so it will arrive fast!
+                        #if doPrint:
+                        #    print 'motion detected, going to send motion picture to Telegram'
+                        #globMyLog.info('motion detected, going to send motion picture to Telegram')
+                        # Line below commented out, motion video is sent instead.
+                        #communication.sendTelegramImg(firstImageName, 'Motion detected!')
+
+                        firstImageIndex = imgCount
+                        extraImgCount = 0
+                        prevMotionDetected = True
+                    else:
+                        extraImgCount = extraImgCount + 1
+                        if doPrint:
+                            print 'capturing extra image no:', extraImgCount
+
+                        if extraImgCount == MotionDetectionBufferLength - MotionDetectionBufferOffset - 1:
+                            # All required images for this motion are captured, stop the capturing.
+                            globContinueCapture = False
+
+                if doShow:
+                    # Show motion
+                    cv2.imshow("Motion", img)
+                    cv2.waitKey(100)
+
+                # imgCount keeps position in circular buffer.
+                imgCount = (imgCount + 1) % MotionDetectionBufferLength
 
             # Ready with this image. Make globNewImageAvailable false to make sure a new image is taken.
             # Keep critical section as short as possible.

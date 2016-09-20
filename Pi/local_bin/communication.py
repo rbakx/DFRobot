@@ -50,8 +50,6 @@ def TelegramClient():
                     telegramBot.sendVideo(secret.TelegramChatId, open(mediaOut, "rb"), caption = msgOut)
                 else:
                     telegramBot.sendMessage(secret.TelegramChatId, msgOut)
-                stack.setProp(SendReceiveLayer.PROP_MESSAGES,messages)
-                stack.broadcastEvent(YowLayerEvent(SendReceiveLayer.EVENT_SEND_MESSAGE))
             else:
                 globTelegramMsgOutAvailableLock.release()
             
@@ -101,10 +99,6 @@ def TelegramClient():
             logging.getLogger("MyLog").info('TelegramClient exception: ' + str(e))
             # Signal to restart this TelegramClient thread.
             globTelegramRestart = True
-    try:
-        stack.broadcastEvent(YowLayerEvent(SendReceiveLayer.EVENT_DISCONNECT))
-    except Exception,e:
-        logging.getLogger("MyLog").info('TelegramClient exception: ' + str(e))
 
 
 def telegramCallback(msg):
