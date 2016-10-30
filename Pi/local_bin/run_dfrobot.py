@@ -38,7 +38,7 @@ SizeStop = 60.0 * ImgWidthFactor  # Calibrated with 640 * 480 image.
 # Motion detection constants.
 MotionDetectionBufferLength = FpsLq * 30  # Number of images in motion detection buffer.
 MotionDetectionBufferOffset = FpsLq * 3   # Number of images that are kept before the motion is detected.
-GrayLevelDifferenceTreshold = 20        # The larger this number the larger the graylevel difference must be to be considered as true motion.
+GrayLevelDifferenceTreshold = 80        # The larger this number the larger the graylevel difference must be to be considered as true motion.
 MinContourArea = 100 * ImgAreaFactor    # The larger this number the larger the motion contours must be to be considerd as true motion.
 MaxNofContours = 200                    # Maximum number of contours otherwise it will not be considered as true motion.
 # Upload constants.
