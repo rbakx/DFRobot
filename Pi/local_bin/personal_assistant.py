@@ -4,6 +4,7 @@ import time
 import math
 import re
 import json
+import base64
 import datetime
 import alsaaudio, audioop
 from scipy import signal
@@ -16,6 +17,8 @@ import own_util
 import secret
 
 # Global constants
+# hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
+hints = ["james", "volume", "alarm", "at", "date", "time", "lights", "on", "off", "demonstration", "news", "netherlands", "local", "weather", "radio", "hits", "salsa", "christmas"]
 SampleRate = 16000
 NyquistFrequency = 0.5 * SampleRate
 B, A = signal.butter(5, [4400.0/NyquistFrequency, 4600.0/NyquistFrequency], btype='band')
@@ -192,14 +195,6 @@ def setVolumeLoudspeaker(volume):
     stdOutAndErr = own_util.runShellCommandWait('amixer set PCM -- ' + volume)
 
 
-def switchOnLoudspeaker():
-    stdOutAndErr = own_util.runShellCommandWait('sudo /usr/local/bin/own_gpio.py --loudspeaker on')
-
-
-def switchOffLoudspeaker():
-    stdOutAndErr = own_util.runShellCommandWait('sudo /usr/local/bin/own_gpio.py --loudspeaker off')
-
-
 # Converts a text containing a time indication in words or in digits to a uniform (hours,minutes) tuple.
 # It supports the formats of multiple STT engines.
 def textToHoursAndMinutes(text, format):
@@ -275,23 +270,32 @@ def speechToIntent(sttEngine):
         stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec flac -b: 128k /tmp/file.flac -y')
         own_util.switchLight(False)
         if sttEngine == "Google":
-            stdOutAndErr = own_util.runShellCommandWait('curl -s -X POST --header "content-type: audio/x-flac; rate=16000;" --data-binary @"/tmp/file.flac" "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextGoogleApiKey + '"')
-            # Google always replies with an empty JSON response '{"result":[]}' on the first line.
-            # If there is speech, The second line contains the actual JSON result.
-            # If there is no speech, there is no second line so we have to check this.
-            if len(stdOutAndErr.splitlines()) != 2:
-                # Return empty text, intent and value to indicate the voice command is invalid.
-                return (text,intent,value)
-            stdOutAndErr = stdOutAndErr.splitlines()[1]
+            with open("/tmp/file.flac", 'rb') as speech:
+                speech_content = base64.b64encode(speech.read())
+            payload = {
+                "config": {
+                    "encoding":"FLAC",
+                    "sampleRate": 16000,
+                    "languageCode": "en-US",
+                    "speechContext": {
+                        "phrases": hints
+                    }
+                },
+                "audio": {
+                    "content": speech_content.decode("UTF-8")
+                }
+            }
+            jsonData=json.dumps(payload)
+            stdOutAndErr = own_util.runShellCommandWait('curl -s -X POST -H "Content-Type: application/json" --data-binary \'' + jsonData + '\' "https://speech.googleapis.com/v1beta1/speech:syncrecognize?key=' + secret.SpeechToTextGoogleCloudApiKey + '"')
             # Now stdOutAndErr contains the JSON response from the STT engine.
             decoded = json.loads(stdOutAndErr)
             try:
-                confidence = decoded["result"][0]["alternative"][0]["confidence"]  # not a string but a float
+                confidence = decoded["results"][0]["alternatives"][0]["confidence"]  # not a string but a float
             except Exception,e:
                 pass
             try:
                 # Use encode() to convert the Unicode strings contained in JSON to ASCII.
-                text = decoded["result"][0]["alternative"][0]["transcript"].encode('ascii', 'ignore')
+                text = decoded["results"][0]["alternatives"][0]["transcript"].encode('ascii', 'ignore')
             except Exception,e:
                 pass
 
@@ -311,6 +315,7 @@ def speechToIntent(sttEngine):
 
         # Now text contains the text as received from the STT engine.
         # All voice commands have to start with 'James'.
+        logging.getLogger("MyLog").info('speech to raw text: ' + str(text))
         m = re.search('james (.*)', text, re.IGNORECASE)
         if m and m.group(1) and m.group(1) != "":  # be safe
             text = m.group(1).strip()  # Use strip() to remove leading and trailing whitespaces if any.
@@ -434,8 +439,8 @@ def speechToIntent(sttEngine):
 
 def textToSpeech(text, language, speed):
     # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
-    # When speech is finished the loudspeaker is turned off.
-    own_util.runShellCommandNowait('/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"' + ';sudo /usr/local/bin/own_gpio.py --loudspeaker off')
+    # First turn loudspeaker on, then play speech. When speech is finished the loudspeaker is turned off.
+    own_util.runShellCommandNowait('sudo /usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"' + ';sudo /usr/local/bin/own_gpio.py --loudspeaker off')
 
 
 def query(queryStr):
@@ -464,9 +469,9 @@ def query(queryStr):
 def personalAssistant():
     global globInteractive, globDoHomeRun, globCmd
     global globAlarmStatus, globAlarm
-    switchOnLoudspeaker()
+    own_util.switchOnLoudspeaker()
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
-    switchOffLoudspeaker()
+    own_util.switchOffLoudspeaker()
     volumeVoice = '90%' # Volume used for voice responses.
     volumeAlarm = '80%'  # Volume used for alarm.
     volumeMusic = '70%'  # Volume used for music, can be set by voice command.
@@ -484,22 +489,21 @@ def personalAssistant():
             # This way it is possible to start a command with two claps and also stop a running command with two claps.
             stdOutAndErr = own_util.runShellCommandWait('sudo killall mplayer')
             if stdOutAndErr == "":
-                switchOffLoudspeaker()
+                own_util.switchOffLoudspeaker()
                 eventHandled = True  # Indicate the event is handled.
             stdOutAndErr = own_util.runShellCommandWait('mpc current')
             if stdOutAndErr != "" and 'error' not in stdOutAndErr:
                 # Stop playing music and stop Music Player Daemon service.
                 stdOutAndErr = own_util.runShellCommandWait('mpc stop;mpc clear;sudo service mpd stop')
-                switchOffLoudspeaker()
+                own_util.switchOffLoudspeaker()
                 eventHandled = True  # Indicate the event is handled.
             if globAlarmStatus == 'ALARMSET':
                 # Switch on loadspeaker, sound the alarm and switch off loudspeaker.
                 setVolumeLoudspeaker(volumeVoice)
-                switchOnLoudspeaker()
                 # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
-                # When speech is finished the loudspeaker is turned off.
+                # First turn loudspeaker on, then play alarm. When alarm is finished the loudspeaker is turned off.
                 setVolumeLoudspeaker(volumeAlarm)
-                own_util.runShellCommandNowait('/usr/bin/mplayer /home/pi/Sources/alarm.mp3;sudo /usr/local/bin/own_gpio.py --loudspeaker off')
+                own_util.runShellCommandNowait('sudo /usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer /home/pi/Sources/alarm.mp3;sudo /usr/local/bin/own_gpio.py --loudspeaker off')
                 globAlarmStatus = ''  # reset alarm
                 eventHandled = True   # Indicate the event is handled.
             if globDoHomeRun == True:
@@ -510,8 +514,9 @@ def personalAssistant():
                 continue
             # Speak out greeting.
             setVolumeLoudspeaker(volumeVoice)
-            switchOnLoudspeaker()
+            own_util.switchOnLoudspeaker()
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
+            own_util.switchOffLoudspeaker()
 
             # Listen and translate speech to text.
             (text,intent,value) = speechToIntent("Google")
@@ -595,13 +600,15 @@ def personalAssistant():
                     station = 'http://108.61.73.117:8124'
                 # Start Music Player Daemon service and play music.
                 setVolumeLoudspeaker(volumeMusic)
+                own_util.switchOnLoudspeaker()
                 stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
             elif intent == "query":
                 response = query(text)
             else:
                 # Not a valid intent.
+                own_util.switchOnLoudspeaker()
                 stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/nocomprendo.mp3')
-                switchOffLoudspeaker()
+                own_util.switchOffLoudspeaker()
             if response != '':
                 logging.getLogger("MyLog").info('response: ' + response)
                 setVolumeLoudspeaker(volumeVoice)
@@ -618,7 +625,7 @@ def personalAssistant():
         except Exception,e:
             logging.getLogger("MyLog").info('personalAssistant exception: ' + str(e))
             # Switch off the loudspeaker if it is still on.
-            switchOffLoudspeaker()
+            own_util.switchOffLoudspeaker()
 
 
 def startPersonalAssistant():

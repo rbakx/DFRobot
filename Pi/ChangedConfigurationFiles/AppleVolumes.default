@@ -176,6 +176,7 @@
 # By default all users have access to their home directories.
 ~/			"Home Directory"
 /etc			"/etc"
+/tmp			"/tmp"
 /lib			"/lib"
 /var/www		"/var/www"
 /usr/lib/cgi-bin	"/usr/lib/cgi-bin"

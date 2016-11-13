@@ -3,8 +3,13 @@
 import time
 import re
 import json
+import base64
 import own_util
 import secret
+
+# Global constants
+# hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
+hints = ["james", "alarm", "at", "date", "time", "lights", "on", "off", "demonstration", "news", "netherlands", "local", "weather", "radio", "hits", "salsa", "christmas"]
 
 
 # Set microphone capturing volume and gain control.
@@ -94,21 +99,34 @@ def speechToIntent(sttEngine):
         stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec flac -b: 128k /tmp/file.flac -y')
         own_util.switchLight(False)
         if sttEngine == "Google":
-            stdOutAndErr = own_util.runShellCommandWait('curl -s -X POST --header "content-type: audio/x-flac; rate=16000;" --data-binary @"/tmp/file.flac" "http://www.google.com/speech-api/v2/recognize?client=chromium&lang=en_US&key=' + secret.SpeechToTextGoogleApiKey + '"')
-            # Google always replies with an empty JSON response '{"result":[]}' on the first line. The second
-            # line contains the actual JSON result, so take this line.
-            stdOutAndErr = stdOutAndErr.splitlines()[1]
+            with open("/tmp/file.flac", 'rb') as speech:
+                speech_content = base64.b64encode(speech.read())
+            payload = {
+                "config": {
+                    "encoding":"FLAC",
+                    "sampleRate": 16000,
+                    "languageCode": "en-US",
+                    "speechContext": {
+                        "phrases": hints
+                    }
+                },
+                "audio": {
+                    "content": speech_content.decode("UTF-8")
+                }
+            }
+            jsonData=json.dumps(payload)
+            stdOutAndErr = own_util.runShellCommandWait('curl -s -X POST -H "Content-Type: application/json" --data-binary \'' + jsonData + '\' "https://speech.googleapis.com/v1beta1/speech:syncrecognize?key=' + secret.SpeechToTextGoogleCloudApiKey + '"')
             # Now stdOutAndErr contains the JSON response from the STT engine.
             print stdOutAndErr
             decoded = json.loads(stdOutAndErr)
             try:
-                confidence = decoded["result"][0]["alternative"][0]["confidence"]  # not a string but a float
+                confidence = decoded["results"][0]["alternatives"][0]["confidence"]  # not a string but a float
             except Exception,e:
                 print "json exception: " + str(e)
                 pass
             try:
                 # Use encode() to convert the Unicode strings contained in JSON to ASCII.
-                text = decoded["result"][0]["alternative"][0]["transcript"].encode('ascii', 'ignore')
+                text = decoded["results"][0]["alternatives"][0]["transcript"].encode('ascii', 'ignore')
             except Exception,e:
                 print "json exception: " + str(e)
                 pass
