@@ -110,6 +110,10 @@ def homeRun():
     if globBrightness < 60:
         own_util.switchLight(True)
 
+    # Indicate to communication and personal_assistant modules that a Home run is started.
+    # Both modules can stop the Home run by setting globDoHomeRun to False.
+    communication.globDoHomeRun = True;
+    personal_assistant.globDoHomeRun = True
     while globContinueCapture == True and (communication.globDoHomeRun == True or personal_assistant.globDoHomeRun == True):
         # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()

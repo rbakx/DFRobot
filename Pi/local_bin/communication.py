@@ -58,22 +58,17 @@ def TelegramClient():
 
             # Handle messages.
             msg = receiveTelegramMsg()
-            if re.search('.*james.*', msg, re.IGNORECASE):
-                pattern = re.compile("james ", re.IGNORECASE)
-                queryStr = pattern.sub("", msg)
-                response = personal_assistant.query(queryStr)
-                sendTelegramMsg(response)
-            elif re.search('.*motion.*on.*', msg, re.IGNORECASE):
+            if re.search('^motion on$', msg, re.IGNORECASE):
                 globDoMotionDetection = True
                 sendTelegramMsg('motion detection is on')
-            elif re.search('.*motion.*off.*', msg, re.IGNORECASE):
+            elif re.search('^motion off$', msg, re.IGNORECASE):
                 globDoMotionDetection = False
                 sendTelegramMsg('motion detection is off')
-            elif re.search('picture', msg, re.IGNORECASE):
+            elif re.search('^picture$', msg, re.IGNORECASE):
                 globTelegramSendPicture = True;
-            elif re.search('hi', msg, re.IGNORECASE):
+            elif re.search('^hi$', msg, re.IGNORECASE):
                 sendTelegramMsg('hi there!')
-            elif re.search('.*feel.*', msg, re.IGNORECASE):
+            elif re.search('^feel$', msg, re.IGNORECASE):
                 level = own_util.getBatteryLevel()
                 if level > 190:
                     sendTelegramMsg('I feel great, my energy level is ' + str(level))
@@ -81,19 +76,20 @@ def TelegramClient():
                     sendTelegramMsg('I feel ok, my energy level is ' + str(level))
                 else:
                     sendTelegramMsg('I feel a bit weak, my energy level is ' + str(level))
-            elif re.search('how are you', msg, re.IGNORECASE):
+            elif re.search('^how are you$', msg, re.IGNORECASE):
                 sendTelegramMsg('I am fine, thx for asking!')
-            elif re.search('battery', msg, re.IGNORECASE):
+            elif re.search('^battery$', msg, re.IGNORECASE):
                 if own_util.checkCharging() == True:
                     sendTelegramMsg('I am charging, my battery level is ' + str(own_util.getBatteryLevel()))
                 else:
                     sendTelegramMsg('I am not charging, my battery level is ' + str(own_util.getBatteryLevel()))
-            elif re.search('awake', msg, re.IGNORECASE):
+            elif re.search('^awake$', msg, re.IGNORECASE):
                 sendTelegramMsg('I am awake for ' + own_util.getUptime())
-            elif re.search('joke', msg, re.IGNORECASE):
+            elif re.search('^joke$', msg, re.IGNORECASE):
                 sendTelegramMsg('\'What does your robot do, Sam?\' .......... \'It collects data about the surrounding environment, then discards it and drives into walls\'')
-            elif msg != '':
-                sendTelegramMsg('no comprendo: ' + msg)
+            elif msg != "":
+                response = personal_assistant.query(msg)
+                sendTelegramMsg(response)
 
         except Exception,e:
             logging.getLogger("MyLog").info('TelegramClient exception: ' + str(e))

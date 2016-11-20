@@ -8,6 +8,11 @@ sys.path.insert(0, sys.path[0]+"/../../NotForGitHub/")
 import secret
 
 
+# Global constants
+# Phrase hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
+phraseHints = ["radio salsa", "radio hits", "radio christmas", "volume"]
+
+
 # runShellCommandWait(cmd) will block until 'cmd' is finished.
 # This because the communicate() method is used to communicate to interact with the process through the redirected pipes.
 def runShellCommandWait(cmd):
@@ -23,7 +28,7 @@ payload = {
         "sampleRate": 16000,
         "languageCode": "en-US",
         "speechContext": {
-            "phrases": ["james radio salsa", "radio", "salsa"]
+            "phrases": phraseHints
         }
     },
     "audio": {

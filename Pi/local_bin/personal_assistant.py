@@ -14,11 +14,12 @@ import wolframalpha
 import feedparser
 import logging
 import own_util
+import own_gpio
 import secret
 
 # Global constants
-# hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
-hints = ["james", "volume", "alarm", "at", "date", "time", "lights", "on", "off", "demonstration", "news", "netherlands", "local", "weather", "radio", "hits", "salsa", "christmas"]
+# Phrase hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
+phraseHints = ["radio salsa", "radio hits", "radio christmas", "volume"]
 SampleRate = 16000
 NyquistFrequency = 0.5 * SampleRate
 B, A = signal.butter(5, [4400.0/NyquistFrequency, 4600.0/NyquistFrequency], btype='band')
@@ -27,6 +28,8 @@ FirCoeff = signal.firwin(29, 4000.0/NyquistFrequency, pass_zero=False)
 # Global variables
 globInteractive = False
 globDoHomeRun = False
+globDistance = 1000
+globPreviousDistance = 1000
 globCmd = ''
 
 
@@ -85,8 +88,8 @@ def checkSilence(p1, p2, p3, p4, p5):
         return False
 
 
-# This function waits for an event like the trigger sound or alarm and returns when the event has occurred.
-def waitForEvent():
+# This function waits for the claps event or alarm and returns when the event has occurred.
+def waitForClaps():
     global globAlarmStatus, globAlarm
     global SampleRate
     # Constants used in this function.
@@ -170,6 +173,34 @@ def waitForEvent():
                     if silenceCount == 0:
                         # No silence detected in tome, so start over again.
                         doContinue1 = True
+
+
+# This function waits for an event like the proximity event or alarm and returns when the event has occurred.
+def waitForProximity():
+    global globAlarmStatus, globAlarm
+    global globDistance, globPreviousDistance
+    while True:
+        # Check for alarm event.
+        if globAlarmStatus == 'SET' and datetime.datetime.now().time() > datetime.time(*globAlarm):
+            # Indicate alarm and return.
+            globAlarmStatus = 'ALARMSET'
+            return
+        # Check for proximity event. Only consider it as an event when the distance gets below the treshhold.
+        # This to prevent new events occurring when for example a hand is kept in front of the robot.
+        # Do not check for proximity during a Home run, this because during a Home run the proximity to objects can be small.
+        if globDoHomeRun == False and globDistance > 0.0 and globDistance < 20.0 and globPreviousDistance >= 20.0:
+            logging.getLogger("MyLog").info('proximity event')
+            return
+        globPreviousDistance = globDistance
+        time.sleep(0.01)  # sleep to enable other threads to run.
+
+
+def distanceLoop():
+    global globDistance
+    while True:
+        # Check for proximity event.
+        globDistance = own_gpio.getUsSensorDistance(0)
+        time.sleep(0.1)  # Wait for the echo to damp out.
 
 
 def initMicrophone():
@@ -278,7 +309,7 @@ def speechToIntent(sttEngine):
                     "sampleRate": 16000,
                     "languageCode": "en-US",
                     "speechContext": {
-                        "phrases": hints
+                        "phrases": phraseHints
                     }
                 },
                 "audio": {
@@ -313,17 +344,6 @@ def speechToIntent(sttEngine):
             except Exception,e:
                 pass
 
-        # Now text contains the text as received from the STT engine.
-        # All voice commands have to start with 'James'.
-        logging.getLogger("MyLog").info('speech to raw text: ' + str(text))
-        m = re.search('james (.*)', text, re.IGNORECASE)
-        if m and m.group(1) and m.group(1) != "":  # be safe
-            text = m.group(1).strip()  # Use strip() to remove leading and trailing whitespaces if any.
-        else:
-            # Return only text and empty intent and value to indicate the voice command is invalid.
-            return (text,intent,value)
-            
-        # 'text' now containes the voice command without 'James'.
         # Get intent and value.
         if re.search('(?:volume|vol).*', text, re.IGNORECASE):
             m = re.search('(?:volume|vol) ([0-9]|10)$', text, re.IGNORECASE)
@@ -440,7 +460,7 @@ def speechToIntent(sttEngine):
 def textToSpeech(text, language, speed):
     # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
     # First turn loudspeaker on, then play speech. When speech is finished the loudspeaker is turned off.
-    own_util.runShellCommandNowait('sudo /usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"' + ';sudo /usr/local/bin/own_gpio.py --loudspeaker off')
+    own_util.runShellCommandNowait(' /usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer -ao alsa -really-quiet -noconsolecontrols "http://api.voicerss.org/?key=' + secret.VoiceRSSApiKey + '&hl=' + language + '&r=' + speed + '&f=16khz_16bit_mono&src=' + text + '"' + ';/usr/local/bin/own_gpio.py --loudspeaker off')
 
 
 def query(queryStr):
@@ -469,19 +489,20 @@ def query(queryStr):
 def personalAssistant():
     global globInteractive, globDoHomeRun, globCmd
     global globAlarmStatus, globAlarm
-    own_util.switchOnLoudspeaker()
+    own_gpio.switchOnLoudspeaker()
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
-    own_util.switchOffLoudspeaker()
+    own_gpio.switchOffLoudspeaker()
     volumeVoice = '90%' # Volume used for voice responses.
-    volumeAlarm = '80%'  # Volume used for alarm.
+    volumeAlarm = '90%'  # Volume used for alarm.
     volumeMusic = '70%'  # Volume used for music, can be set by voice command.
     globAlarmStatus = ''
     while True:
         try:
             language = 'en-us' # default language
             tmpCmd = ''
-            # Wait for an event like the trigger sound or alarm. This contains a sleep to enable other threads to run.
-            waitForEvent()
+            # Wait for the claps event, proximity event or alarm. These functions contain a sleep to enable other threads to run.
+            # Choose waitForClaps() or waitForProximity() below.
+            waitForProximity()
             # Event occurred. An event can be for example two claps to request a servie, two claps to interrupt an action or an alarm.
             # 'eventHandled' is used to check whether the event is handled or not.
             eventHandled = False
@@ -489,13 +510,13 @@ def personalAssistant():
             # This way it is possible to start a command with two claps and also stop a running command with two claps.
             stdOutAndErr = own_util.runShellCommandWait('sudo killall mplayer')
             if stdOutAndErr == "":
-                own_util.switchOffLoudspeaker()
+                own_gpio.switchOffLoudspeaker()
                 eventHandled = True  # Indicate the event is handled.
             stdOutAndErr = own_util.runShellCommandWait('mpc current')
             if stdOutAndErr != "" and 'error' not in stdOutAndErr:
                 # Stop playing music and stop Music Player Daemon service.
                 stdOutAndErr = own_util.runShellCommandWait('mpc stop;mpc clear;sudo service mpd stop')
-                own_util.switchOffLoudspeaker()
+                own_gpio.switchOffLoudspeaker()
                 eventHandled = True  # Indicate the event is handled.
             if globAlarmStatus == 'ALARMSET':
                 # Switch on loadspeaker, sound the alarm and switch off loudspeaker.
@@ -503,7 +524,7 @@ def personalAssistant():
                 # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
                 # First turn loudspeaker on, then play alarm. When alarm is finished the loudspeaker is turned off.
                 setVolumeLoudspeaker(volumeAlarm)
-                own_util.runShellCommandNowait('sudo /usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer /home/pi/Sources/alarm.mp3;sudo /usr/local/bin/own_gpio.py --loudspeaker off')
+                own_util.runShellCommandNowait('/usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer /home/pi/Sources/alarm.mp3;/usr/local/bin/own_gpio.py --loudspeaker off')
                 globAlarmStatus = ''  # reset alarm
                 eventHandled = True   # Indicate the event is handled.
             if globDoHomeRun == True:
@@ -514,9 +535,9 @@ def personalAssistant():
                 continue
             # Speak out greeting.
             setVolumeLoudspeaker(volumeVoice)
-            own_util.switchOnLoudspeaker()
+            own_gpio.switchOnLoudspeaker()
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
-            own_util.switchOffLoudspeaker()
+            own_gpio.switchOffLoudspeaker()
 
             # Listen and translate speech to text.
             (text,intent,value) = speechToIntent("Google")
@@ -600,15 +621,15 @@ def personalAssistant():
                     station = 'http://108.61.73.117:8124'
                 # Start Music Player Daemon service and play music.
                 setVolumeLoudspeaker(volumeMusic)
-                own_util.switchOnLoudspeaker()
+                own_gpio.switchOnLoudspeaker()
                 stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
             elif intent == "query":
                 response = query(text)
             else:
                 # Not a valid intent.
-                own_util.switchOnLoudspeaker()
+                own_gpio.switchOnLoudspeaker()
                 stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/nocomprendo.mp3')
-                own_util.switchOffLoudspeaker()
+                own_gpio.switchOffLoudspeaker()
             if response != '':
                 logging.getLogger("MyLog").info('response: ' + response)
                 setVolumeLoudspeaker(volumeVoice)
@@ -625,11 +646,14 @@ def personalAssistant():
         except Exception,e:
             logging.getLogger("MyLog").info('personalAssistant exception: ' + str(e))
             # Switch off the loudspeaker if it is still on.
-            own_util.switchOffLoudspeaker()
+            own_gpio.switchOffLoudspeaker()
 
 
 def startPersonalAssistant():
+    own_gpio.initGpio()
     initMicrophone()
     initLoudspeaker()
     thread.start_new_thread(personalAssistant, ())
+    # Start thread for measuring distance using the ultrasonic sensor. A seperate thread is needed because measuring distance is time critical.
+    thread.start_new_thread(distanceLoop, ())
 

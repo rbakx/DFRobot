@@ -40,22 +40,6 @@ def ownReboot(reason):
     runShellCommandNowait('sudo reboot')
 
 
-# Switch on the loudspeaker.
-def switchOnLoudspeaker():
-    stdOutAndErr = runShellCommandWait('sudo /usr/local/bin/own_gpio.py --loudspeaker on')
-
-
-# Switch off the loudspeaker.
-def switchOffLoudspeaker():
-    stdOutAndErr = runShellCommandWait('sudo /usr/local/bin/own_gpio.py --loudspeaker off')
-
-
-# Get distance measurement.
-def getDistance(sensorId):
-    stdOutAndErr = runShellCommandWait('sudo /usr/local/bin/own_gpio.py --us_sensor ' + sensorId)
-    return float(stdOutAndErr)
-
-
 def move(direction, speed, delay, doMove):
     if doMove:
         if direction == 'forward':
