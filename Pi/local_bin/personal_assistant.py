@@ -19,7 +19,7 @@ import secret
 
 # Global constants
 # Phrase hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
-phraseHints = ["radio salsa", "radio hits", "radio christmas", "volume"]
+phraseHints = ["radio salsa", "radio hits", "radio christmas", "volume", "demonstration"]
 SampleRate = 16000
 NyquistFrequency = 0.5 * SampleRate
 B, A = signal.butter(5, [4400.0/NyquistFrequency, 4600.0/NyquistFrequency], btype='band')
@@ -29,7 +29,7 @@ FirCoeff = signal.firwin(29, 4000.0/NyquistFrequency, pass_zero=False)
 globInteractive = False
 globDoHomeRun = False
 globDistance = 1000
-globPreviousDistance = 1000
+globProximityCount = 0
 globCmd = ''
 
 
@@ -178,24 +178,31 @@ def waitForClaps():
 # This function waits for an event like the proximity event or alarm and returns when the event has occurred.
 def waitForProximity():
     global globAlarmStatus, globAlarm
-    global globDistance, globPreviousDistance
+    global globDistance, globProximityCount
     while True:
         # Check for alarm event.
         if globAlarmStatus == 'SET' and datetime.datetime.now().time() > datetime.time(*globAlarm):
             # Indicate alarm and return.
             globAlarmStatus = 'ALARMSET'
             return
-        # Check for proximity event. Only consider it as an event when the distance gets below the treshhold.
-        # This to prevent new events occurring when for example a hand is kept in front of the robot.
+        # Check for proximity event. Only consider it as an event when the distance gets below the treshhold for the first n times.
+        # The 'n' times is because the distance measurement occasionally shows wrong values.
+        # Only consider the 'first' n times to prevent new events occurring when for example a hand is kept in front of the robot.
         # Do not check for proximity during a Home run, this because during a Home run the proximity to objects can be small.
-        if globDoHomeRun == False and globDistance > 0.0 and globDistance < 20.0 and globPreviousDistance >= 20.0:
-            logging.getLogger("MyLog").info('proximity event')
-            return
-        globPreviousDistance = globDistance
-        time.sleep(0.01)  # sleep to enable other threads to run.
+        if globDoHomeRun == False:
+            if globDistance > 0.0 and globDistance < 20.0:
+                globProximityCount = globProximityCount + 1
+                if globProximityCount == 2:
+                    # Proximity event detected!
+                    logging.getLogger("MyLog").info('proximity event')
+                    return
+            elif globDistance >= 20.0:
+                globProximityCount = 0;
+        # Sleep to enable other threads to run. The sleep time can be the same as used in the proximityLoop.
+        time.sleep(0.1)
 
 
-def distanceLoop():
+def proximityLoop():
     global globDistance
     while True:
         # Check for proximity event.
@@ -655,5 +662,5 @@ def startPersonalAssistant():
     initLoudspeaker()
     thread.start_new_thread(personalAssistant, ())
     # Start thread for measuring distance using the ultrasonic sensor. A seperate thread is needed because measuring distance is time critical.
-    thread.start_new_thread(distanceLoop, ())
+    thread.start_new_thread(proximityLoop, ())
 
