@@ -377,7 +377,7 @@ def captureAndMotionDetection():
             globNewImageAvailableLock.release()
 
             # Check if picture has to be sent to Telegram.
-            if communication.globTelegramSendPicture == True:
+            if personal_assistant.globTelegramSendPicture == True:
                 # pictureCountDown is used in case it is dark and the ligth has to be switched on.
                 # It counts down a number of images to give the camera time to settle. When pictureCountDown == 0, the picture is taken.
                 # Switch on light if needed.
@@ -390,7 +390,7 @@ def captureAndMotionDetection():
                     cv2.imwrite('/home/pi/DFRobotUploads/latest_img.jpg', img)
                     communication.sendTelegramImg('/home/pi/DFRobotUploads/latest_img.jpg', 'Here is your picture!')
                     # Not needed to lock here as it is ok to miss a 'send picture' command when they come in too fast.
-                    communication.globTelegramSendPicture = False
+                    personal_assistant.globTelegramSendPicture = False
                     # Switch off light.
                     own_util.switchLight(False)
                     lightSwitchedOn = False
@@ -398,7 +398,7 @@ def captureAndMotionDetection():
                     pictureCountDown = pictureCountDown - 1
 
             # If globDoMotionDetection == False, then only capture images for sending pictures if required.
-            if communication.globDoMotionDetection == False:
+            if personal_assistant.globDoMotionDetection == False:
                 if logCount == 0:
                     if doPrint:
                         print 'globDoMotionDetection set to False'
@@ -584,7 +584,7 @@ if args.doprint:
 if args.testmotion:
     doTestMotion = True
     doPrint = True
-    communication.globDoMotionDetection = True
+    personal_assistant.globDoMotionDetection = True
 if args.show:
     doShow = True
 if args.nomove:
@@ -713,6 +713,8 @@ while True:
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
+                    # Upload homerun video to Telegram.
+                    communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your homerun video!')
 
                 # Command handled, so make empty.
                 communication.globCmd = ''

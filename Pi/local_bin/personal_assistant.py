@@ -19,7 +19,7 @@ import secret
 
 # Global constants
 # Phrase hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
-phraseHints = ["radio salsa", "radio hits", "radio christmas", "volume", "demonstration"]
+phraseHints = ["radio salsa", "radio hits", "radio christmas", "volume", "demo"]
 SampleRate = 16000
 NyquistFrequency = 0.5 * SampleRate
 B, A = signal.butter(5, [4400.0/NyquistFrequency, 4600.0/NyquistFrequency], btype='band')
@@ -31,6 +31,11 @@ globDoHomeRun = False
 globDistance = 1000
 globProximityCount = 0
 globCmd = ''
+globVolumeVoice = '90%'  # Volume used for voice responses.
+globVolumeAlarm = '90%'  # Volume used for alarm.
+globVolumeMusic = '70%'  # Volume used for music, can be set by voice command.
+globDoMotionDetection = False
+globTelegramSendPicture = False
 
 
 # This function filters an audioBuffer which is a Python string of nsamples shorts.
@@ -295,9 +300,9 @@ def textToHoursAndMinutes(text, format):
     return (hoursStr,minutesStr)
 
 
-# Records speech from the microphone and translates this into a (text,intent,value) tuple.
+# Records speech from the microphone and translates this into a text.
 # It supports the formats of multiple STT engines.
-def speechToIntent(sttEngine):
+def speechToText(sttEngine):
     confidence = ""
     text = ""
     intent = ""
@@ -351,117 +356,96 @@ def speechToIntent(sttEngine):
             except Exception,e:
                 pass
 
-        # Get intent and value.
-        if re.search('(?:volume|vol).*', text, re.IGNORECASE):
-            m = re.search('(?:volume|vol) ([0-9]|10)$', text, re.IGNORECASE)
-            if m and m.group(1) and m.group(1) != "":  # be safe
-                intent = "volume"
-                value = m.group(1)
-            else:
-                intent = "volume"
-                value = "invalid"
-        elif re.search('alarm at.*', text, re.IGNORECASE):
-            (hours,minutes) = textToHoursAndMinutes(text, sttEngine)
-            intent = "alarm"
-            value = (hours,minutes)
-        elif re.search('alarm$', text, re.IGNORECASE):
-            intent = "alarm"
-            value = None
-        elif re.search('date$|time$', text, re.IGNORECASE):
-            intent = "time"
-            value = None
-        elif re.search('lights on$', text, re.IGNORECASE):
-            intent = "light"
-            value = "on"
-        elif re.search('lights off$', text, re.IGNORECASE):
-            intent = "light"
-            value = "off"
-        elif re.search('demonstration$', text, re.IGNORECASE):
-            intent = "demo"
-            value = "start"
-        elif re.search('stop$', text, re.IGNORECASE):
-            intent = "demo"
-            value = "stop"
-        elif re.search('go home$', text, re.IGNORECASE):
-            intent = "home"
-            value = "start"
-        elif re.search('news$', text, re.IGNORECASE):
-            intent = "news"
-            value = "world"
-        elif re.search('news netherlands$', text, re.IGNORECASE):
-            intent = "news"
-            value = "netherlands"
-        elif re.search('news local$', text, re.IGNORECASE):
-            intent = "news"
-            value = "eindhoven"
-        elif re.search('weather$', text, re.IGNORECASE):
-            intent = "weather"
-            value = None
-        elif re.search('radio hits$', text, re.IGNORECASE):
-            intent = "radio"
-            value = "hits"
-        elif re.search('radio salsa$', text, re.IGNORECASE):
-            intent = "radio"
-            value = "salsa"
-        elif re.search('radio christmas$', text, re.IGNORECASE):
-            intent = "radio"
-            value = "christmas"
-        elif text != "":
-            intent = "query"
-            value = text
+    # Now text contains the spoken text.
+    return text
 
-    elif sttEngine == "WitAi":
-        # Turn on and off light to indicate when the robot is listening.
-        own_util.switchLight(True)
-        stdOutAndErr = own_util.runShellCommandWait('arecord -d 5 -D "plughw:1,0" -q -r 16000 -c 1 -f S16_LE -t wav | avconv -i pipe:0 -acodec mp3 -b: 128k /tmp/file.mp3 -y')
-        own_util.switchLight(False)
-        stdOutAndErr = own_util.runShellCommandWait('curl -s -X POST --header "Content-Type: audio/mpeg3" --header "Authorization: Bearer ' + secret.WitAiToken + '" --data-binary @"/tmp/file.mp3" "https://api.wit.ai/speech?v=20141022"')
-        # Now stdOutAndErr contains the JSON response from the STT engine.
-        decoded = json.loads(stdOutAndErr)
-        try:
-            confidence = decoded["outcomes"][0]["confidence"]  # not a string but a float
-        except Exception,e:
-            pass
-        try:
-            # Use encode() to convert the Unicode strings contained in JSON to ASCII.
-            text = decoded["outcomes"][0]["_text"].encode('ascii', 'ignore')
-        except Exception,e:
-            pass
-        try:
-            # Use encode() to convert the Unicode strings contained in JSON to ASCII.
-            intent = decoded["outcomes"][0]["intent"].encode('ascii', 'ignore')
-        except Exception,e:
-            pass
-        
-        # Now text contains the text as received from the STT engine.
-        # All voice commands have to start with 'James'.
-        m = re.search('james (.*)', text, re.IGNORECASE)
+
+# Translates a text into a (intent,value) tuple.
+def textToIntent(text):
+    intent = ""
+    value = ""
+    if re.search('(?:volume|vol).*', text, re.IGNORECASE):
+        m = re.search('^(?:volume|vol) ([0-9]|10)$', text, re.IGNORECASE)
         if m and m.group(1) and m.group(1) != "":  # be safe
-            text = m.group(1).strip()  # Use strip() to remove leading and trailing whitespaces if any.
+            intent = "volume"
+            value = m.group(1)
         else:
-            # Return only text and empty intent and value to indicate the voice command is invalid.
-            intent = ""
-            value = None
-            return (text,intent,value)
-        
-        # If intent is 'alarm', get the value of the time entity.
-        if intent == "alarm":
-            try:
-                # Use encode() to convert the Unicode strings contained in JSON to ASCII.
-                value = decoded["outcomes"][0]["entities"]["datetime"][0]["value"].encode('ascii', 'ignore')
-            except Exception,e:
-                pass
-            # Reformat time to a tuple (hours,minutes) so it can be used to set the alarm.
-            m = re.search('.*?([0-9]+):([0-9]+).*', value, re.IGNORECASE)
-            if m and m.group(1) and m.group(2) and m.group(1) != "" and m.group(2) != "":  # be safe
-                value = (m.group(1),m.group(2))
-            else:
-                value = None
-        # If intent is 'query' then the text should be passed to a knowledge engine, so put it in 'value'.
-        elif intent == "query":
-            value = text
-        
-    return (text,intent,value)
+            intent = "volume"
+            value = "invalid"
+    elif re.search('^alarm at.*', text, re.IGNORECASE):
+        (hours,minutes) = textToHoursAndMinutes(text, sttEngine)
+        intent = "alarm"
+        value = (hours,minutes)
+    elif re.search('^alarm$', text, re.IGNORECASE):
+        intent = "alarm"
+        value = None
+    elif re.search('^date$|^time$', text, re.IGNORECASE):
+        intent = "time"
+        value = None
+    elif re.search('^lights on$', text, re.IGNORECASE):
+        intent = "light"
+        value = "on"
+    elif re.search('^lights off$', text, re.IGNORECASE):
+        intent = "light"
+        value = "off"
+    elif re.search('^demo$', text, re.IGNORECASE):
+        intent = "demo"
+        value = "start"
+    elif re.search('^stop$', text, re.IGNORECASE):
+        intent = "demo"
+        value = "stop"
+    elif re.search('^go home$', text, re.IGNORECASE):
+        intent = "home"
+        value = "start"
+    elif re.search('^news$', text, re.IGNORECASE):
+        intent = "news"
+        value = "world"
+    elif re.search('^news netherlands$', text, re.IGNORECASE):
+        intent = "news"
+        value = "netherlands"
+    elif re.search('^news local$', text, re.IGNORECASE):
+        intent = "news"
+        value = "eindhoven"
+    elif re.search('^weather$', text, re.IGNORECASE):
+        intent = "weather"
+        value = None
+    elif re.search('^radio hits$', text, re.IGNORECASE):
+        intent = "radio"
+        value = "hits"
+    elif re.search('^radio salsa$', text, re.IGNORECASE):
+        intent = "radio"
+        value = "salsa"
+    elif re.search('^radio christmas$', text, re.IGNORECASE):
+        intent = "radio"
+        value = "christmas"
+    elif re.search('^radio off$', text, re.IGNORECASE):
+        intent = "radio"
+        value = "off"
+    elif re.search('^motion on$', text, re.IGNORECASE):
+        intent = "motion"
+        value = "on"
+    elif re.search('^motion off$', text, re.IGNORECASE):
+        intent = "motion"
+        value = "off"
+    elif re.search('^picture$', text, re.IGNORECASE):
+        intent = "picture"
+        value = ""
+    elif re.search('^hi$', text, re.IGNORECASE):
+        intent = "greet"
+        value = ""
+    elif re.search('^battery$', text, re.IGNORECASE):
+        intent = "battery"
+        value = ""
+    elif re.search('^awake$', text, re.IGNORECASE):
+        intent = "awake"
+        value = ""
+    elif re.search('^joke$', text, re.IGNORECASE):
+        intent = "joke"
+        value = ""
+    elif text != "":
+        intent = "query"
+        value = text
+    return (intent,value)
 
 
 def textToSpeech(text, language, speed):
@@ -493,20 +477,169 @@ def query(queryStr):
     return response
 
 
-def personalAssistant():
+# Handle the intent and initiate the corresponding action.
+# 'client' can be:
+#  - "speech" for handling the intent and corresponding action for a person nearby the robot.
+#  - "text" for handling the intent and corresponding action for a person connected via Telegram with the robot.
+# Returns a text response.
+def handleIntent(intent, value, client):
     global globInteractive, globDoHomeRun, globCmd
     global globAlarmStatus, globAlarm
+    global globVolumeVoice, globVolumeAlarm, globVolumeMusic
+    global globDoMotionDetection, globTelegramSendPicture
+    try:
+        language = 'en-us' # default language
+        response = ''
+        tmpCmd = ''
+        if intent == "volume":
+            if value != "invalid":
+                globVolumeMusic = str(int(value) * 10) + '%'
+                response = 'volume ' + value
+                setVolumeLoudspeaker(globVolumeMusic)
+            else:
+                response = 'volume not valid'
+        elif intent == "alarm":
+            if value is None:
+                if globAlarmStatus == 'SET':
+                    response = 'alarm set at ' + alarmString
+                else:
+                    response = 'alarm not set'
+            else:
+                (hours,minutes) = value
+                if hours != "invalid":
+                    # 'alarmString' will be a string like "11:15" or "0:07".
+                    alarmString = hours + ":" + minutes
+                    globAlarm = (int(hours),int(minutes))  # Integer tuple containing hours and minutes.
+                    globAlarmStatus = 'SET'
+                    response = 'alarm set at ' + alarmString
+                else:
+                    globAlarmStatus = ''  # Set off any previous alarm.
+                    response = 'alarm not valid'
+        elif intent == "time":
+            response = "{:%B %d %Y, %H:%M}".format(datetime.datetime.now())
+        elif intent == "light":
+            if value == "on":
+                tmpCmd = 'light-on'
+                response = 'lights on'
+            else:
+                tmpCmd = 'light-off'
+                response = 'lights off'
+        elif intent == "demo":
+            if value == "start":
+                tmpCmd = 'demo-start'
+                response = 'demo activated'
+                globDoHomeRun = True
+            else:
+                tmpCmd = 'demo-stop'
+                response = 'demo stopped'
+                globDoHomeRun = False
+        elif intent == "home":
+            if value == "start":
+                tmpCmd = 'home-start'
+                response = 'going home'
+                globDoHomeRun = True
+            else:
+                tmpCmd = 'home-stop'
+                response = 'home stopped'
+                globDoHomeRun = False
+        elif intent == "news":
+            if value == "world":
+                d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')
+            elif value == "netherlands":
+                d = feedparser.parse('http://www.ed.nl/cmlink/1.3280352')
+            else:
+                d = feedparser.parse('http://www.ed.nl/cmlink/1.4419308')
+            response = ''
+            for post in d.entries[:1000]:  # Restrict to 10 entries.
+                # feedparser can return Unicode strings, so convert to ASCII.
+                response = response + '\n' + post.title.encode('ascii', 'ignore')
+            language = 'nl-nl'
+        elif intent == "weather":
+            d = feedparser.parse('http://projects.knmi.nl/RSSread/rss_KNMIverwachtingen.php')
+            response = d['entries'][0]['description']
+            # feedparser can return Unicode strings, so convert to ASCII.
+            response = response.encode('ascii', 'ignore')
+            language = 'nl-nl'
+        elif intent == "radio":
+            if value == "hits":
+                station = 'http://87.118.122.45:30710'
+            elif value == "salsa":
+                station = 'http://50.7.56.2:8020'
+            elif value == "christmas":
+                station = 'http://108.61.73.117:8124'
+            elif value == "off":
+                station = ''
+            if station != '':
+                # Start Music Player Daemon service and play music.
+                setVolumeLoudspeaker(globVolumeMusic)
+                own_gpio.switchOnLoudspeaker()
+                stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
+            else:
+                # Stop playing music and stop Music Player Daemon service.
+                stdOutAndErr = own_util.runShellCommandWait('mpc stop;mpc clear;sudo service mpd stop')
+                own_gpio.switchOffLoudspeaker()
+        elif intent =="motion":
+            if value == "on":
+                globDoMotionDetection = True
+                response = 'motion detection is on'
+            else:
+                globDoMotionDetection = False
+                response = 'motion detection is off'
+        elif intent =="picture":
+            globTelegramSendPicture = True
+        elif intent =="greet":
+            response = 'hi there!'
+        elif intent == "battery":
+            if own_util.checkCharging() == True:
+                response = 'I am charging, my battery level is ' + str(own_util.getBatteryLevel())
+            else:
+                response = 'I am not charging, my battery level is ' + str(own_util.getBatteryLevel())
+        elif intent == "awake":
+            response = 'I am awake for ' + own_util.getUptime()
+        elif intent == "joke":
+            response = '\'What does your robot do, Sam?\' .......... \'It collects data about the surrounding environment, then discards it and drives into walls\''
+        elif intent == "query":
+            response = query(value)
+        else:
+            # Not a valid intent.
+            if client == "speech":
+                own_gpio.switchOnLoudspeaker()
+                stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/nocomprendo.mp3')
+                own_gpio.switchOffLoudspeaker()
+            elif client == "text":
+                response = "no comprendo"
+        if response != '':
+            logging.getLogger("MyLog").info('response: ' + response)
+            if client == "speech":
+                setVolumeLoudspeaker(globVolumeVoice)
+                # Non blocking call to textToSpeech() which will turn off the loudspeaker when it's done.
+                textToSpeech(response, language, '0')
+        # Initiate the corresponding action.
+        if tmpCmd != '':
+            globCmd = tmpCmd
+            # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
+            globInteractive = True
+            # Sleep to give server time to start the command. Then set globInteractive to False again.
+            time.sleep(1.0)
+            globInteractive = False
+    except Exception,e:
+        logging.getLogger("MyLog").info('handleIntent exception: ' + str(e))
+        # Switch off the loudspeaker if it is still on.
+        own_gpio.switchOffLoudspeaker()
+    return response
+
+
+# Let the robot be a personal assistant.
+def personalAssistant():
+    global globDoHomeRun
+    global globAlarmStatus
+    global globVolumeVoice, globVolumeAlarm, globVolumeMusic
     own_gpio.switchOnLoudspeaker()
     stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
     own_gpio.switchOffLoudspeaker()
-    volumeVoice = '90%' # Volume used for voice responses.
-    volumeAlarm = '90%'  # Volume used for alarm.
-    volumeMusic = '70%'  # Volume used for music, can be set by voice command.
     globAlarmStatus = ''
     while True:
         try:
-            language = 'en-us' # default language
-            tmpCmd = ''
             # Wait for the claps event, proximity event or alarm. These functions contain a sleep to enable other threads to run.
             # Choose waitForClaps() or waitForProximity() below.
             waitForProximity()
@@ -527,10 +660,10 @@ def personalAssistant():
                 eventHandled = True  # Indicate the event is handled.
             if globAlarmStatus == 'ALARMSET':
                 # Switch on loadspeaker, sound the alarm and switch off loudspeaker.
-                setVolumeLoudspeaker(volumeVoice)
+                setVolumeLoudspeaker(globVolumeVoice)
                 # Use runShellCommandNowait() to be able to continue and to stop this process if needed.
                 # First turn loudspeaker on, then play alarm. When alarm is finished the loudspeaker is turned off.
-                setVolumeLoudspeaker(volumeAlarm)
+                setVolumeLoudspeaker(globVolumeAlarm)
                 own_util.runShellCommandNowait('/usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer /home/pi/Sources/alarm.mp3;/usr/local/bin/own_gpio.py --loudspeaker off')
                 globAlarmStatus = ''  # reset alarm
                 eventHandled = True   # Indicate the event is handled.
@@ -541,115 +674,17 @@ def personalAssistant():
             if eventHandled == True:
                 continue
             # Speak out greeting.
-            setVolumeLoudspeaker(volumeVoice)
+            setVolumeLoudspeaker(globVolumeVoice)
             own_gpio.switchOnLoudspeaker()
             stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/james.mp3')
             own_gpio.switchOffLoudspeaker()
 
             # Listen and translate speech to text.
-            (text,intent,value) = speechToIntent("Google")
+            text = speechToText("Google")
+            (intent,value) = textToIntent(text)
             logging.getLogger("MyLog").info('speech to text, intent, value: ' + str(text) + ", " + str(intent) + ", " + str(value))
-            response = ''
             # Handle the intent.
-            if intent == "volume":
-                if value != "invalid":
-                    volumeMusic = str(int(value) * 10) + '%'
-                    response = 'volume ' + value
-                else:
-                    response = 'volume not valid'
-            elif intent == "alarm":
-                if value is None:
-                    if globAlarmStatus == 'SET':
-                        response = 'alarm set at ' + alarmString
-                    else:
-                        response = 'alarm not set'
-                else:
-                    (hours,minutes) = value
-                    if hours != "invalid":
-                        # 'alarmString' will be a string like "11:15" or "0:07".
-                        alarmString = hours + ":" + minutes
-                        globAlarm = (int(hours),int(minutes))  # Integer tuple containing hours and minutes.
-                        globAlarmStatus = 'SET'
-                        response = 'alarm set at ' + alarmString
-                    else:
-                        globAlarmStatus = ''  # Set off any previous alarm.
-                        response = 'alarm not valid'
-            elif intent == "time":
-                response = "{:%B %d %Y, %H:%M}".format(datetime.datetime.now())
-            elif intent == "light":
-                if value == "on":
-                    tmpCmd = 'light-on'
-                    response = 'lights on'
-                else:
-                    tmpCmd = 'light-off'
-                    response = 'lights off'
-            elif intent == "demo":
-                if value == "start":
-                    tmpCmd = 'demo-start'
-                    response = 'demo activated'
-                    globDoHomeRun = True
-                else:
-                    tmpCmd = 'demo-stop'
-                    response = 'demo stopped'
-                    globDoHomeRun = False
-            elif intent == "home":
-                if value == "start":
-                    tmpCmd = 'home-start'
-                    response = 'going home'
-                    globDoHomeRun = True
-                else:
-                    tmpCmd = 'home-stop'
-                    response = 'home stopped'
-                    globDoHomeRun = False
-            elif intent == "news":
-                if value == "world":
-                    d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')
-                elif value == "netherlands":
-                    d = feedparser.parse('http://www.ed.nl/cmlink/1.3280352')
-                else:
-                    d = feedparser.parse('http://www.ed.nl/cmlink/1.4419308')
-                response = ''
-                for post in d.entries[:1000]:  # Restrict to 10 entries.
-                    # feedparser can return Unicode strings, so convert to ASCII.
-                    response = response + '\n' + post.title.encode('ascii', 'ignore')
-                language = 'nl-nl'
-            elif intent == "weather":
-                d = feedparser.parse('http://projects.knmi.nl/RSSread/rss_KNMIverwachtingen.php')
-                response = d['entries'][0]['description']
-                # feedparser can return Unicode strings, so convert to ASCII.
-                response = response.encode('ascii', 'ignore')
-                language = 'nl-nl'
-            elif intent == "radio":
-                if value == "hits":
-                    station = 'http://87.118.122.45:30710'
-                elif value == "salsa":
-                    station = 'http://50.7.56.2:8020'
-                else:
-                    station = 'http://108.61.73.117:8124'
-                # Start Music Player Daemon service and play music.
-                setVolumeLoudspeaker(volumeMusic)
-                own_gpio.switchOnLoudspeaker()
-                stdOutAndErr = own_util.runShellCommandWait('sudo service mpd start;mpc clear;mpc add ' + station + ';mpc play')
-            elif intent == "query":
-                response = query(text)
-            else:
-                # Not a valid intent.
-                own_gpio.switchOnLoudspeaker()
-                stdOutAndErr = own_util.runShellCommandWait('/usr/bin/mplayer /home/pi/Sources/nocomprendo.mp3')
-                own_gpio.switchOffLoudspeaker()
-            if response != '':
-                logging.getLogger("MyLog").info('response: ' + response)
-                setVolumeLoudspeaker(volumeVoice)
-                # Non blocking call to textToSpeech() which will turn off the loudspeaker when it's done.
-                textToSpeech(response, language, '0')
-                # Now we activate the interactive command, after the speech response is generated.
-                if tmpCmd != '':
-                    globCmd = tmpCmd
-                    # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
-                    globInteractive = True
-                    # Sleep to give server time to start the command. Then set globInteractive to False again.
-                    time.sleep(1.0)
-                    globInteractive = False
+            handleIntent(intent, value, "speech")
         except Exception,e:
             logging.getLogger("MyLog").info('personalAssistant exception: ' + str(e))
             # Switch off the loudspeaker if it is still on.
