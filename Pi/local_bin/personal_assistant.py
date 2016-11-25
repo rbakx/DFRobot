@@ -200,6 +200,10 @@ def waitForProximity():
                 if globProximityCount == 2:
                     # Proximity event detected!
                     logging.getLogger("MyLog").info('proximity event')
+                    # Because handling the event means listening to a spoken command through the microphone,
+                    # first stop the DFRobot webpage streaming audio if any to free the microphone.
+                    # Use pkill -f with regular expression to kill te right vlc process.
+                    stdOutAndErr = own_util.runShellCommandWait('sudo pkill -f "vlc -I.*alsa"')
                     return
             elif globDistance >= 20.0:
                 globProximityCount = 0;

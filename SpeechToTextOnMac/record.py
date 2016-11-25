@@ -1,4 +1,5 @@
 #!/usr/local/bin/python
+import argparse
 import pyaudio
 import wave
 import subprocess
@@ -8,7 +9,6 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
 CHUNK = 1024
-RECORD_SECONDS = 3
 WAVE_OUTPUT_FILENAME = "mic.wav"
 
 
@@ -17,6 +17,11 @@ WAVE_OUTPUT_FILENAME = "mic.wav"
 def runShellCommandWait(cmd):
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True).communicate()[0]
 
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--time', required=True)
+args = parser.parse_args()
+timeToRecord = args.time
 
 audio = pyaudio.PyAudio()
 
@@ -27,7 +32,7 @@ stream = audio.open(format=FORMAT, channels=CHANNELS,
 print "recording..."
 frames = []
 
-for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+for i in range(0, int(RATE / CHUNK * int(timeToRecord))):
     data = stream.read(CHUNK)
     frames.append(data)
 print "finished recording"

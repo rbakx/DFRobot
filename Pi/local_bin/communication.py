@@ -226,9 +226,6 @@ def socketServer():
                     chargingStr = 'not charging'
                 statusForWebPage = '<br>' + own_util.getWifiStatus() + '<br>' + 'uptime: ' + own_util.getUptime() + '<br>' + 'battery: ' + str(own_util.getBatteryLevel()) + ' (154 = 6V), ' + chargingStr
                 sendSocketMsg(statusForWebPage)
-            elif re.search('get_distance', msg, re.IGNORECASE):
-                distance = own_util.runShellCommandWait('sudo /usr/local/bin/own_gpio.py --us_sensor 1')
-                sendSocketMsg(distance)
             else:
                 # Handle the interactive commands which take at most a few seconds and do not change the mode.
                 sendSocketMsg('ok')

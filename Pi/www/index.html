@@ -15,21 +15,31 @@
     <p id="error message"></p>
 </div>
 
+<div style="position: absolute; top: 700px; left: 0px;">
+    <audio controls>
+        <source id="audioSrc" src="" type="audio/ogg">
+    </audio>
+</div>
+
 <script> 
-    // Below we generate the webcam url.
+    // Below we generate the video stream url and the audio stream url.
     // This url is deducted from the url of this page.
-    // The assumption is that the webcam port number is one higher than the port number of this page.
+    // The assumption is that the video stream port number is one higher and the audio stream port number two higher than the port number of this page.
     var urlStr = document.URL; // url of this page.
     var patt = /:([0-9]+)/; // regular expression to filter out the portnumber from the url.
     if (patt.test(urlStr) == true) {
         // Execute the regular expression.
-        // The result will contain the tlast matched characters in index 0 an the first parenthesized substring match in index 1.
+        // The result will contain the last matched characters in index 0 an the first parenthesized substring match in index 1.
         var res = patt.exec(urlStr);
         var portNumberPlusOne = (parseInt(res[1]) + 1).toString(); // the first parenthesized substring matches is in index 1
-        var newUrlStr = urlStr.replace(res[1],portNumberPlusOne);
-        document.getElementById("cam").src = newUrlStr + "stream_simple.html"; // url of the webcam video page
+        var portNumberPlusTwo = (parseInt(res[1]) + 2).toString(); // the first parenthesized substring matches is in index 1
+        var newUrlStrPlusOne = urlStr.replace(res[1],portNumberPlusOne);
+        var newUrlStrPlusTwo = urlStr.replace(res[1],portNumberPlusTwo);
+        document.getElementById("cam").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
+        document.getElementById("audioSrc").src = newUrlStrPlusTwo; // url of the video stream page
     } else {
-        document.getElementById("error message").innerHTML = "cannot find webcam url"; // write error message the to page
+        document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
     }
 </script>
+    
 </body></html>

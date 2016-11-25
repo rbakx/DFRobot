@@ -666,7 +666,8 @@ while True:
                     globMyLog.info('going to stop capture http MJPEG stream')
                     if doPrint:
                         print 'going to stop capture http MJPEG stream'
-                    stdOutAndErr = own_util.runShellCommandWait('sudo killall vlc')
+                    # Use pkill -f with regular expression to kill te right vlc process.
+                    stdOutAndErr = own_util.runShellCommandWait('sudo pkill -f "vlc.*localhost:44445"')
                     # Send captured video to Telegram.
                     communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your captured video!')
                 elif cmdList[0] == 'home-start':
@@ -731,8 +732,12 @@ while True:
             if streamStarted == False:
                 # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                 stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                # Same for audio. Use pkill -f with regular expression to kill te right vlc process.
+                stdOutAndErr = own_util.runShellCommandWait('sudo pkill -f "vlc -I.*alsa"')
                 globMyLog.info('going to start stream')
                 own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                # Same for audio.
+                stdOutAndErr = own_util.runShellCommandNowait('cvlc alsa://hw:1,0 --sout \'#standard{access=http,mux=ogg,dst=:44446}\'')
                 # Delay to give stream time to start up and camera to stabilize.
                 time.sleep(5)
                 streamStarted = True

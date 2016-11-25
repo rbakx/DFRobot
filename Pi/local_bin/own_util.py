@@ -30,8 +30,18 @@ def runShellCommandNowait(cmd):
 
 
 def getNofConnections():
-    stdOutAndErr = runShellCommandWait('netstat | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
+    # Port 44444 is the main html page and port 44445 is the video stream.
+    stdOutAndErr = runShellCommandWait('netstat -an | grep -E \'44444.*ESTABLISHED|44445.*ESTABLISHED\' | wc -l')
     return int(stdOutAndErr)
+
+
+def isMicFree():
+    # Port 44446 is the audio stream.
+    stdOutAndErr = runShellCommandWait('netstat -an | grep -E \'44446.*ESTABLISHED\' | wc -l')
+    if int(stdOutAndErr) == 0:
+        return True
+    else:
+        return False
 
 
 # Reboot the system.
