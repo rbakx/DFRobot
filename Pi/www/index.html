@@ -15,13 +15,16 @@
     <p id="error message"></p>
 </div>
 
-<div style="position: absolute; top: 700px; left: 0px;">
-    <audio controls>
-        <source id="audioSrc" src="" type="audio/ogg">
-    </audio>
-</div>
+<form action="/cgi-bin/dfrobot.sh?/var/www/index1.html" method="POST">
+    <div style="position: absolute; top: 720px; left: 5px;">
+        <audio id="audioCtrl">
+            <source id="audioSrc" src="" type="audio/ogg">
+        </audio>
+        <button style = "background-color: rgb(255, 0, 0)" onclick="document.getElementById('audioCtrl').play()" name="cmd" value="mic-on">Mic</button>
+    </div>
+</form>
 
-<script> 
+<script>
     // Below we generate the video stream url and the audio stream url.
     // This url is deducted from the url of this page.
     // The assumption is that the video stream port number is one higher and the audio stream port number two higher than the port number of this page.

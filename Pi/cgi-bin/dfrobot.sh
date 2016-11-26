@@ -73,6 +73,10 @@ function handle_command {
     then
         echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
         socketSendAndReceive "${1}"
+    elif [ "${1}" == "mic-on" ]
+    then
+        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+        socketSendAndReceive "${1}"
     elif [ "${1}" == "status" ]
     then
         echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
