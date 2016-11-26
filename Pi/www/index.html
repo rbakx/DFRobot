@@ -15,14 +15,11 @@
     <p id="error message"></p>
 </div>
 
-<form action="/cgi-bin/dfrobot.sh?/var/www/index1.html" method="POST">
-    <div style="position: absolute; top: 720px; left: 5px;">
-        <audio id="audioCtrl">
-            <source id="audioSrc" src="" type="audio/ogg">
-        </audio>
-        <button style = "background-color: rgb(255, 0, 0)" onclick="document.getElementById('audioCtrl').play()" name="cmd" value="mic-on">Mic</button>
-    </div>
-</form>
+<div style="position: absolute; top: 700px; left: 5px;">
+    <audio controls>
+        <source id="audioSrc" src="" type="audio/ogg">
+    </audio>
+</div>
 
 <script>
     // Below we generate the video stream url and the audio stream url.

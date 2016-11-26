@@ -207,6 +207,22 @@ def waitForProximity():
                     return
             elif globDistance >= 20.0:
                 globProximityCount = 0;
+        # No proximity detected, so microphone will not be used by the Personal Assistent to record local speech.
+        # This means the micropone audio stream for the DFRobot webpage can be enabled.
+        # It was tried to start the microphone audio stream only after the user clicks a 'Mic' button on the DFRobot webpage.
+        # This does not work because then the webpage starts listening before the stream is actually started and it will not connect to the stream.
+        # Therefore we now start the microphone audio stream for the DFRobot webpage whenever it is not used by the Personal assistant to record local speech.
+        # First check if the microphone audio stream is already running. If not, start it.
+        # The 'cvlc alsa://hw:1,0' part of the command specifies that VLC will use the Linux ALSA API and connect to card 1, device 0.
+        # Using 'arecord -l' (which lists the 'CAPTURE Hardware Devices') one can see that this is 'card 1: Device [USB PnP Sound Device], device 0: USB Audio [USB Audio]', which means the USB microphone.
+        # This device has a default format of 'PCM S16LE' (PCM signed 16-bit little-endian) at 48000 Hz, Mono.
+        # The 48000 Hz is a bit overkill for the USB microphone so to save bandwidth we want to use 16000Hz.
+        # However, it is not clear whether it is possible to put the ALSA USB Audio device directly into a lower bitrate.
+        # Therefore with VLC we transcode the audio stream into 's16le' at 16000 Hz.
+        stdOutAndErr = own_util.runShellCommandWait('ps -ef | grep "vlc -I.* alsa" | wc -l')
+        if int(stdOutAndErr) < 3:  # 1 extra line is found because of grep command itself and 1 extra line because of the stdOutAndErr output ending with a newline.
+            stdOutAndErr = own_util.runShellCommandNowait('cvlc alsa://hw:1,0 --sout \'#transcode{acodec= s16le,channels=1,samplerate=16000}:standard{access=http,mux=ogg,dst=:44446}\'')
+
         # Sleep to enable other threads to run. The sleep time can be the same as used in the proximityLoop.
         time.sleep(0.1)
 
@@ -221,7 +237,7 @@ def proximityLoop():
 
 def initMicrophone():
     # Set microphone capturing volume and gain control.
-    # To do this we have to find out which card is the capturing device with 'arecord -l'.
+    # To do this we have to find out which card is the capturing device with 'arecord -l', which lists the 'CAPTURE Hardware Devices'.
     # Suppose the capturing card is 'card 1', then its capabilities can be listed with 'amixer --card 1 contents'.
     # These capabilities can differ per capturing device.
     # This will show the numid's of its interfaces. Look for the 'Mic Capture Volume' which has for example numid=3.

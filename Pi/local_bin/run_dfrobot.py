@@ -612,7 +612,6 @@ while True:
         # Short sleep to preempt this thread. Otherwise this thread will be dominating and other threads
         # like the socketServer thread will not run at regular times.
         time.sleep(0.001)
-
         if communication.globInteractive == True or personal_assistant.globInteractive == True:
             # Intearctive mode
             if modePrevious != 'INTERACTIVE':
@@ -694,16 +693,6 @@ while True:
                     own_util.switchLight(True)
                 elif cmdList[0] == 'light-off':
                     own_util.switchLight(False)
-                elif cmdList[0] == 'mic-on':
-                    # Start microphone audio stream to DFRobot webpage.
-                    # First kill previous streaming if any. Use pkill -f with regular expression to kill te right vlc process.
-                    # The line below is commented out because killing the microphone audio stream and then restarting it will disrupt the connection.
-                    # Therefore we just check if the microphone audio stream is already running and if not, start it.
-                    # stdOutAndErr = own_util.runShellCommandWait('sudo pkill -f "vlc -I.*alsa"')
-                    # First check if the microphone audio stream is already running. If not, start it.
-                    stdOutAndErr = own_util.runShellCommandWait('ps -ef | grep "vlc -I.* alsa" | wc -l')
-                    if int(stdOutAndErr) < 3:  # 1 extra line is found because of grep command itself and 1 extra line because of the stdOutAndErr output ending with a newline.
-                        stdOutAndErr = own_util.runShellCommandNowait('cvlc alsa://hw:1,0 --sout \'#standard{access=http,mux=ogg,dst=:44446}\'')
                 elif cmdList[0] == 'demo-start':
                     # Switch on light if needed
                     if globBrightness < 60:

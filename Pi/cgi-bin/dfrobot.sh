@@ -42,45 +42,16 @@ function handle_command {
         echo -e "\n***** $(date), $prompt: START LOG  *****" >> /home/pi/log/dfrobot_log.txt
     fi
 
-    if [ "${1}" == "start-stream-hq" ] || [ "${1}" == "start-stream-lq" ] || [ "${1}" == "stop-stream" ]
+    # Send the command with possible parameter to the communication socket.
+    echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
+    socketSendAndReceive "${1} ${2}"
+    # Handle 'special' cases.
+    if [ "${1}" == "start-stream-hq" ] || [ "${1}" == "start-stream-lq" ] || [ "${1}" == "stop-stream" ] || [ "${1}" == "home-start" ]
     then
-        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1}"
         # Force complete page refresh to correctly show the new or stopped MJPEG stream.
         do_refresh_page=true
-    elif [ "${1}" == "capture-start" ] || [ "${1}" == "capture-stop" ]
-    then
-        socketSendAndReceive "${1}"
-    elif [ "${1}" == "forward" ] || [ "${1}" == "backward" ] || [ "${1}" == "left" ] || [ "${1}" == "right" ]
-    then
-        echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1} ${2}"
-    elif [ "${1}" == "cam-move" ]
-    then
-        echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1} ${2}"
-    elif [ "${1}" == "light-on" ] || [ "${1}" == "light-off" ]
-    then
-        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1}"
-    elif [ "${1}" == "home-start" ]
-    then
-        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1}"
-        # Force complete page refresh to correctly show the new MJPEG stream.
-        do_refresh_page=true
-    elif [ "${1}" == "home-stop" ]
-    then
-        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1}"
-    elif [ "${1}" == "mic-on" ]
-    then
-        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1}"
     elif [ "${1}" == "status" ]
     then
-        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1}"
         globStatus=$globSocketMessageReceived
         # Indicate to refresh the status frame.
         do_refresh_frame=true
@@ -89,10 +60,6 @@ function handle_command {
         echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
         # going to reboot. Do it right here as other threads might be corrupt.
         sudo reboot
-    else
-        # All other commands given in the text box, just send it to the socket server.
-        echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
-        socketSendAndReceive "${1}"
     fi
 }
 
