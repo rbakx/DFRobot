@@ -19,7 +19,7 @@ import secret
 
 # Global constants
 # Phrase hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
-phraseHints = ["radio salsa", "radio hits", "radio christmas", "volume", "demo"]
+phraseHints = ["radio salsa", "radio hits", "radio christmas", "radio spanish", "volume", "demo"]
 SampleRate = 16000
 NyquistFrequency = 0.5 * SampleRate
 B, A = signal.butter(5, [4400.0/NyquistFrequency, 4600.0/NyquistFrequency], btype='band')
@@ -202,7 +202,7 @@ def waitForProximity():
                     logging.getLogger("MyLog").info('proximity event')
                     # Because handling the event means listening to a spoken command through the microphone,
                     # first stop the DFRobot webpage microphone streaming audio if any to free the microphone.
-                    # Use pkill -f with regular expression to kill te right vlc process.
+                    # Use pkill -f with regular expression to kill the right vlc process.
                     stdOutAndErr = own_util.runShellCommandWait('sudo pkill -f "vlc -I.*alsa"')
                     return
             elif globDistance >= 20.0:
@@ -438,6 +438,9 @@ def textToIntent(text):
     elif re.search('^radio christmas$', text, re.IGNORECASE):
         intent = "radio"
         value = "christmas"
+    elif re.search('^radio spanish$', text, re.IGNORECASE):
+        intent = "radio"
+        value = "spanish"
     elif re.search('^radio off$', text, re.IGNORECASE):
         intent = "radio"
         value = "off"
@@ -587,6 +590,8 @@ def handleIntent(intent, value, client):
                 station = 'http://50.7.56.2:8020'
             elif value == "christmas":
                 station = 'http://108.61.73.117:8124'
+            elif value == "spanish":
+                station = 'http://208.92.53.70:443/SER_MALLORCA_SC'
             elif value == "off":
                 station = ''
             if station != '':
