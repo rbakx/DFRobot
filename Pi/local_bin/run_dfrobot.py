@@ -605,7 +605,8 @@ communication.startSocketServer()
 personal_assistant.startPersonalAssistant()
 
 streamStarted = False
-modePrevious = ''
+mode = 'DEFAULT'
+prevMode = 'DEFAULT'
 while True:
     # Catch exceptions and log them.
     try:
@@ -613,12 +614,7 @@ while True:
         # like the socketServer thread will not run at regular times.
         time.sleep(0.001)
         if communication.globInteractive == True or personal_assistant.globInteractive == True:
-            # Intearctive mode
-            if modePrevious != 'INTERACTIVE':
-                if doPrint:
-                    print 'going to start interactive mode'
-                globMyLog.info('going to start interactive mode')
-                modePrevious = 'INTERACTIVE'
+            # Intearctive command received.
             expr = re.compile('(.+?)(?:$| )')
             if communication.globInteractive == True:
                 cmdList = expr.findall(communication.globCmd)
@@ -715,19 +711,28 @@ while True:
                     homeRun()
                     # Upload homerun video to Telegram.
                     communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your homerun video!')
+                elif cmdList[0] == 'patrol-start':
+                    globMyLog.info('going to start patrol')
+                    startTimePatrol = time.time()
+                    if doPrint:
+                        print 'going to start patrol'
+                    mode = 'PATROL'
+                    # Switch on light if needed
+                    if globBrightness < 60:
+                        own_util.switchLight(True)
+                    own_util.move('forward', 200, 1.0, doMove)
+                    own_util.move('forward', 200, 1.0, doMove)
+                    own_util.drive(63, 63, doMove)
+                elif cmdList[0] == 'stop':
+                    prevMode = mode
+                    mode = 'STOP'
 
                 # Command handled, so make empty.
                 communication.globCmd = ''
                 personal_assistant.globCmd = ''
 
-        else:
-            # Default run mode
-            if modePrevious != 'DEFAULTRUN':
-                if doPrint:
-                    print 'going to start Default run'
-                globMyLog.info('going to start Default run')
-                modePrevious = 'DEFAULTRUN'
-
+        elif mode == 'DEFAULT':
+            # Default mode runs means captureAndMotionDetection mode. This mode stops when there is interaction.
             if streamStarted == False:
                 # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                 stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
@@ -754,6 +759,31 @@ while True:
                 # the stream can be switched by an interactive user.
                 # Stop MJPEG stream. Use sudo because stream can be started by another user.
                 streamStarted = False
+
+        # Handle non default modes
+        if mode == 'PATROL':
+            # Check timeout of patrol mode.
+            if time.time() - startTimePatrol > 30:
+                prevMode = mode
+                mode = 'STOP'
+            elif personal_assistant.globDistance > 0 and personal_assistant.globDistance < 20:
+                prevMode = mode
+                mode = 'STOP'
+            elif personal_assistant.globDistance > 0 and personal_assistant.globDistance < 60:
+                own_util.move('left', 200, 1.0, doMove)
+            else:
+                own_util.drive(63, 63, doMove)
+        elif mode == 'STOP':
+            globMyLog.info('going to stop action')
+            if doPrint:
+                print 'going to stop action'
+            own_util.drive(0, 0, True)
+            own_util.switchLight(False)
+            if prevMode == 'PATROL':
+                if doPrint:
+                    print 'going to stop patrol'
+            mode = 'DEFAULT'
+
 
     except Exception,e:
         globMyLog.info('run_dfrobot exception: ' + str(e))

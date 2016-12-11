@@ -19,7 +19,7 @@ import secret
 
 # Global constants
 # Phrase hints are the phrases which are likely to be spoken. They are used to improve speech recognition.
-phraseHints = ["radio salsa", "radio hits", "radio christmas", "radio spanish", "volume", "demo"]
+phraseHints = ["radio salsa", "radio hits", "radio christmas", "radio spanish", "volume", "demo", "patrol", "stop"]
 SampleRate = 16000
 NyquistFrequency = 0.5 * SampleRate
 B, A = signal.butter(5, [4400.0/NyquistFrequency, 4600.0/NyquistFrequency], btype='band')
@@ -411,12 +411,15 @@ def textToIntent(text):
     elif re.search('^demo$', text, re.IGNORECASE):
         intent = "demo"
         value = "start"
-    elif re.search('^stop$', text, re.IGNORECASE):
-        intent = "demo"
-        value = "stop"
+    elif re.search('^patrol$', text, re.IGNORECASE):
+        intent = "patrol"
+        value = "start"
     elif re.search('^go home$', text, re.IGNORECASE):
         intent = "home"
         value = "start"
+    elif re.search('^stop$', text, re.IGNORECASE):
+        intent = "stop"
+        value = "stop"
     elif re.search('^news$', text, re.IGNORECASE):
         intent = "news"
         value = "world"
@@ -552,19 +555,20 @@ def handleIntent(intent, value, client):
                 tmpCmd = 'demo-start'
                 response = 'demo activated'
                 globDoHomeRun = True
-            else:
-                tmpCmd = 'demo-stop'
-                response = 'demo stopped'
-                globDoHomeRun = False
+        elif intent == "patrol":
+            if value == "start":
+                tmpCmd = 'patrol-start'
+                response = 'patrol activated'
+                globDoHomeRun = True
+        elif intent == "stop":
+            tmpCmd = 'stop'
+            response = 'stopped'
+            globDoHomeRun = False
         elif intent == "home":
             if value == "start":
                 tmpCmd = 'home-start'
                 response = 'going home'
                 globDoHomeRun = True
-            else:
-                tmpCmd = 'home-stop'
-                response = 'home stopped'
-                globDoHomeRun = False
         elif intent == "news":
             if value == "world":
                 d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')

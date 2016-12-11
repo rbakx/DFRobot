@@ -9,10 +9,10 @@
 // www.dfrobot.com
 // Last modified on 24/12/2009
 
-int DIR1 = 4;
-int PWM1 = 5;  
-int DIR2 = 7;
-int PWM2 = 6;
+int DIR1 = 7; // left motor
+int PWM1 = 6; // left motor
+int DIR2 = 4; // right motor
+int PWM2 = 5; // right motor
 int ANA0 = A0;
 // LIGHT and RESETCHARGE control the same relay
 int LIGHT = 2;
@@ -20,63 +20,68 @@ int RESETCHARGE = 2;
 int SERVOCAMERA = 3;
 
 int i2cCommand = 0; // global variable for receiving command from I2C
-int i2cParameter = 0; // global variable for receiving parameter from I2C
+int i2cParameters[10]; // global array for receiving parameters from I2C
+int i2cParameterCount = 0; // global variable for keeping I2C parameter count
 int ana0Value = 0; // global variable for sending number to I2C
 unsigned long count = 0; // global variable counting the total number of loops
 
 Servo myServo;  // create servo camera object to control a servo
-int servoCameraPos;   // variable to store the servo camera position 
+int servoCameraPos;   // variable to store the servo camera position
 
 // callback for received data
 void receiveData(int byteCount)
 {
   int i2cData;
-  while(Wire.available()) {
+  while (Wire.available()) {
     i2cData = Wire.read();
   }
   // All values below 128 are commands, else it is a parameter.
   if (i2cData < 128) {
+    // New command so reset parameter count.
+    i2cParameterCount = 0;
     i2cCommand = i2cData;
   }
   else {
-    i2cParameter = i2cData;
+    i2cParameters[i2cParameterCount++] = i2cData;
   }
 }
 
 // callback for sending data
 void sendData()
 {
-  Wire.write(ana0Value/4); // I2C only receives bytes, so map 0..1023 to 0..255
+  Wire.write(ana0Value / 4); // I2C only receives bytes, so map 0..1023 to 0..255
 }
 
+// Left motor.
 void Motor1(int pwm, boolean reverse)
 {
-  analogWrite(PWM1,pwm); //set pwm control, 0 for stop, and 255 for maximum speed
-  if(reverse)
-  { 
-    digitalWrite(DIR1,HIGH);    
+  analogWrite(PWM1, pwm); //set pwm control, 0 for stop, and 255 for maximum speed
+  if (reverse)
+  {
+    digitalWrite(DIR1, HIGH);
   }
   else
   {
-    digitalWrite(DIR1,LOW);    
+    digitalWrite(DIR1, LOW);
   }
-}  
+}
 
+// Right motor.
 void Motor2(int pwm, boolean reverse)
 {
-  analogWrite(PWM2,pwm);
-  if(reverse)
-  { 
-    digitalWrite(DIR2,HIGH);    
+  analogWrite(PWM2, pwm);
+  if (reverse)
+  {
+    digitalWrite(DIR2, HIGH);
   }
   else
   {
-    digitalWrite(DIR2,LOW);    
+    digitalWrite(DIR2, LOW);
   }
-}  
+}
 
-void setup() 
-{ 
+void setup()
+{
   pinMode(DIR1, OUTPUT);
   pinMode(DIR2, OUTPUT);
   pinMode(RESETCHARGE, OUTPUT);
@@ -92,109 +97,128 @@ void setup()
   servoCameraPos = 0;
   myServo.attach(SERVOCAMERA);   // attaches the servocamera pin to the servo object
   myServo.write(servoCameraPos); // put servocamera in start position
-} 
+}
 
-void loop() 
-{ 
+void loop()
+{
   switch (i2cCommand)
   {
-  case 1: // forward
-    if (i2cParameter >=128) {
-      int ms = map(i2cParameter, 128, 255, 50, 1000);
-      Motor1(255, false);
-      Motor2(255, false);
-      delay(ms);
-      Motor1(0, true);
-      Motor2(0, true);
+    case 1: // short move forward, used for safe remote control
+      if (i2cParameterCount == 1) {
+        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        Motor1(255, false);
+        Motor2(255, false);
+        delay(ms);
+        Motor1(0, false);
+        Motor2(0, false);
+        i2cCommand = 0;
+      }
+      break;
+    case 2: // short move backward, used for safe remote control
+      if (i2cParameterCount == 1) {
+        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        Motor1(255, true);
+        Motor2(255, true);
+        delay(ms);
+        Motor1(0, false);
+        Motor2(0, false);
+        i2cCommand = 0;
+      }
+      break;
+    case 3: // short turn left, used for safe remote control
+      if (i2cParameterCount == 1) {
+        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        Motor1(255, true);
+        Motor2(255, false);
+        delay(ms);
+        Motor1(0, false);
+        Motor2(0, false);
+        i2cCommand = 0;
+      }
+      break;
+    case 4: // short turn right, used for safe remote control
+      if (i2cParameterCount == 1) {
+        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        Motor1(255, false);
+        Motor2(255, true);
+        delay(ms);
+        Motor1(0, false);
+        Motor2(0, false);
+        i2cCommand = 0;
+      }
+      break;
+    case 5: // drive, used for autonomous control
+      if (i2cParameterCount == 2) {
+        bool directionLeft, directionRight;
+        int speedLeft, speedRight;
+        // The speed parameters are in the [128..255] range, where [128..191] means backward, 192 means zero speed and [193..255] means forward.
+        if (i2cParameters[0] < 192) {
+          directionLeft = true; // backward left wheels
+          speedLeft = map(i2cParameters[0], 191, 128, 0, 255);
+        }
+        else {
+          directionLeft = false; // forward left wheels
+          speedLeft = map(i2cParameters[0], 192, 255, 0, 255);
+        }
+        if (i2cParameters[1] < 192) {
+          directionRight = true; // backward right wheels
+          speedRight = map(i2cParameters[1], 191, 128, 0, 255);
+        }
+        else {
+          directionRight = false; // forward right wheels
+          speedRight = map(i2cParameters[1], 192, 255, 0, 255);
+        }
+        Motor1(speedLeft, directionLeft);
+        Motor2(speedRight, directionRight);
+        i2cCommand = 0;
+      }
+      break;
+    case 10: // servo for camera up, relative movement
+      if (i2cParameterCount == 1) {
+        // i2cParameters[0] - 128 is number of degrees
+        servoCameraPos = min(servoCameraPos + (i2cParameters[0] - 128), 90);
+        myServo.write(servoCameraPos);
+        i2cCommand = 0;
+      }
+      break;
+    case 11: // servo for camera down, relative movement
+      if (i2cParameterCount == 1) {
+        // i2cParameters[0] - 128 is number of degrees
+        servoCameraPos = max(servoCameraPos - (i2cParameters[0] - 128), 0);
+        myServo.write(servoCameraPos);
+        i2cCommand = 0;
+      }
+      break;
+    case 12: // servo for camera, absolute movement
+      if (i2cParameterCount == 1) {
+        // i2cParameters[0] - 128 is number of degrees
+        servoCameraPos = min(i2cParameters[0] - 128, 90);
+        myServo.write(servoCameraPos);
+        i2cCommand = 0;
+      }
+      break;
+    case 20: // light on
+      digitalWrite(LIGHT, HIGH);
       i2cCommand = 0;
-      i2cParameter = 0;
-    }
-    break;
-  case 2: // backward
-    if (i2cParameter >=128) {
-      int ms = map(i2cParameter, 128, 255, 50, 1000);
-      Motor1(255, true);
-      Motor2(255, true);
-      delay(ms);
-      Motor1(0, false);
-      Motor2(0, false);
+      break;
+    case 21: // light off
+      digitalWrite(LIGHT, LOW);
       i2cCommand = 0;
-      i2cParameter = 0;
-    }
-    break;
-  case 3: // turn left
-    if (i2cParameter >=128) {
-      int ms = map(i2cParameter, 128, 255, 50, 1000);
-      Motor1(255, false);
-      Motor2(255, true);
-      delay(ms);
-      Motor1(0, true);
-      Motor2(0, true);
-      i2cCommand = 0;
-      i2cParameter = 0;
-    }
-    break;
-  case 4: // turn right
-    if (i2cParameter >=128) {
-      int ms = map(i2cParameter, 128, 255, 50, 1000);
-      Motor1(255, true);
-      Motor2(255, false);
-      delay(ms);
-      Motor1(0, true);
-      Motor2(0, true);
-      i2cCommand = 0;
-      i2cParameter = 0;
-    }
-    break;
-  case 10: // servo for camera up, relative movement
-    if (i2cParameter >=128) {
-      // i2cParameter - 128 is number of degrees
-      servoCameraPos = min(servoCameraPos + (i2cParameter - 128), 90);
-      myServo.write(servoCameraPos);
-      i2cCommand = 0;
-      i2cParameter = 0;
-    }
-    break;
-  case 11: // servo for camera down, relative movement
-    if (i2cParameter >=128) {
-      // i2cParameter - 128 is number of degrees
-      servoCameraPos = max(servoCameraPos - (i2cParameter - 128), 0);
-      myServo.write(servoCameraPos);
-      i2cCommand = 0;
-      i2cParameter = 0;
-    }
-    break;
-  case 12: // servo for camera, absolute movement
-    if (i2cParameter >=128) {
-      // i2cParameter - 128 is number of degrees
-      servoCameraPos = min(i2cParameter - 128, 90);
-      myServo.write(servoCameraPos);
-      i2cCommand = 0;
-      i2cParameter = 0;
-    }
-    break;
-  case 20: // light on
-    digitalWrite(LIGHT,HIGH);
-    i2cCommand = 0;
-    break;
-  case 21: // light off
-    digitalWrite(LIGHT,LOW);
-    i2cCommand = 0;
-    break;
-  default:
-    break;
+      break;
+    default:
+      break;
   }
 
-  ana0Value = analogRead(ANA0); 
+  ana0Value = analogRead(ANA0);
 
   delay(100);
   count = count + 1;
   if (count == 72000)
   {
     // reset charge cycle every 2 hours
-    digitalWrite(RESETCHARGE,HIGH);
+    digitalWrite(RESETCHARGE, HIGH);
     delay(2000);
-    digitalWrite(RESETCHARGE,LOW);
+    digitalWrite(RESETCHARGE, LOW);
     count = 0;
   }
 }

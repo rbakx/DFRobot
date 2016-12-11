@@ -50,6 +50,7 @@ def ownReboot(reason):
     runShellCommandNowait('sudo reboot')
 
 
+# Move for a short distance. Used for safe remote control.
 def move(direction, speed, delay, doMove):
     if doMove:
         if direction == 'forward':
@@ -74,6 +75,26 @@ def move(direction, speed, delay, doMove):
         i2c.globI2cLock.release()
     # Still delay when doMove == False to have similar timing.
     time.sleep(delay)
+
+
+# Drive continuouly. Used for autonomous control.
+def drive(speedLeft, speedRight, doMove):
+    if doMove:
+        # Create i2c lock if it does not exist yet.
+        i2c.createI2cLock()
+        # Lock i2c communication for this thread.
+        i2c.globI2cLock.acquire()
+        # Drive command.
+        i2c.write_byte(slaveAddressArduino, 0, 5)
+        # Drive parameters. SpeedLeft and speedRight ar in the [-64..63] range, where negative means backward.
+        # Because the I2C parameters range in the range of 128..255, -64..63 is mapped to 128..255.
+        # At the Arduino side the values are translated into backward and forward direction.
+        i2c.write_byte(slaveAddressArduino, 0, speedLeft + 192)
+        i2c.write_byte(slaveAddressArduino, 0, speedRight + 192)
+        # Delay for i2c communication.
+        time.sleep(i2c.globI2cDelay)
+        # Release i2c communication for this thread.
+        i2c.globI2cLock.release()
 
 
 def moveCamRel(degrees, delay):
