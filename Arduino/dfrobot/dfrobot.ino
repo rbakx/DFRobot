@@ -105,10 +105,11 @@ void loop()
   {
     case 1: // short move forward, used for safe remote control
       if (i2cParameterCount == 1) {
-        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        // In the move command the speed parameter is implemeted as a delay at the Arduino side.
+        int speed = map(i2cParameters[0], 128, 255, 50, 1000);
         Motor1(255, false);
         Motor2(255, false);
-        delay(ms);
+        delay(speed);
         Motor1(0, false);
         Motor2(0, false);
         i2cCommand = 0;
@@ -116,10 +117,11 @@ void loop()
       break;
     case 2: // short move backward, used for safe remote control
       if (i2cParameterCount == 1) {
-        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        // In the move command the speed parameter is implemeted as a delay at the Arduino side.
+        int speed = map(i2cParameters[0], 128, 255, 50, 1000);
         Motor1(255, true);
         Motor2(255, true);
-        delay(ms);
+        delay(speed);
         Motor1(0, false);
         Motor2(0, false);
         i2cCommand = 0;
@@ -127,10 +129,11 @@ void loop()
       break;
     case 3: // short turn left, used for safe remote control
       if (i2cParameterCount == 1) {
-        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        // In the move command the speed parameter is implemeted as a delay at the Arduino side.
+        int speed = map(i2cParameters[0], 128, 255, 50, 1000);
         Motor1(255, true);
         Motor2(255, false);
-        delay(ms);
+        delay(speed);
         Motor1(0, false);
         Motor2(0, false);
         i2cCommand = 0;
@@ -138,10 +141,11 @@ void loop()
       break;
     case 4: // short turn right, used for safe remote control
       if (i2cParameterCount == 1) {
-        int ms = map(i2cParameters[0], 128, 255, 50, 1000);
+        // In the move command the speed parameter is implemeted as a delay at the Arduino side.
+        int speed = map(i2cParameters[0], 128, 255, 50, 1000);
         Motor1(255, false);
         Motor2(255, true);
-        delay(ms);
+        delay(speed);
         Motor1(0, false);
         Motor2(0, false);
         i2cCommand = 0;
@@ -149,7 +153,7 @@ void loop()
       break;
     case 5: // drive, used for autonomous control
       if (i2cParameterCount == 2) {
-        bool directionLeft, directionRight;
+        boolean directionLeft, directionRight;
         int speedLeft, speedRight;
         // The speed parameters are in the [128..255] range, where [128..191] means backward, 192 means zero speed and [193..255] means forward.
         if (i2cParameters[0] < 192) {
@@ -170,6 +174,40 @@ void loop()
         }
         Motor1(speedLeft, directionLeft);
         Motor2(speedRight, directionRight);
+        i2cCommand = 0;
+      }
+      break;
+    case 6: // turn, make a temporary turn while driving, used for autonomous control
+      if (i2cParameterCount == 3) {
+        // i2cParameters[0]: speed straight ahead [128..255], where [128..191] means backward, 192 means zero speed and [193..255] means forward.
+        // i2cParameters[1]: speed increment for turning [128..255], where [128..191] means left, 192 means straight forward and [193..255] means right.
+        // i2cParameters[2]: time to turn [128..255], where 128 means 50 ms and 255 means 1000 ms.
+        boolean directionBackward;
+        int speedStraight;
+        int speedIncrement = (i2cParameters[1] - 192) * 4; // map speedIncrement back to 4*[-64..63] = [-256..252]
+        int ms = map(i2cParameters[2], 128, 255, 50, 1000);
+        
+        // The speed parameters are in the [128..255] range, where [128..191] means backward, 192 means zero speed and [193..255] means forward.
+        if (i2cParameters[0] < 192) {
+          directionBackward = true; // backward left wheels
+          speedStraight = map(i2cParameters[0], 191, 128, 0, 255);
+        }
+        else {
+          directionBackward = false; // forward left wheels
+          speedStraight = map(i2cParameters[0], 192, 255, 0, 255);
+        }
+        // Keep motor speed values between 0 and 255.
+        int speed1 = max(min(speedStraight + speedIncrement,255),-255);
+        int speed2 = max(min(speedStraight - speedIncrement,255),-255);
+        // If speed is negative, we have to inverse the direction.
+        bool dir1 = speed1 >= 0 ? directionBackward : !directionBackward;
+        bool dir2 = speed2 >= 0 ? directionBackward : !directionBackward;
+        Motor1(speed1, dir1);
+        Motor2(speed2, dir2);
+        delay(ms);
+        // Continue driving straight
+        Motor1(speedStraight, directionBackward);
+        Motor2(speedStraight, directionBackward);
         i2cCommand = 0;
       }
       break;

@@ -1,0 +1,46 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+    <title>DFRobot control</title>
+</head>
+<body>
+<div style="position: absolute; top: 0px; left: 0px;"> <iframe id="frame1" src="index1.html" align="left" frameborder="0" height="600" scrolling="yes" width="400"></iframe>
+</div>
+<div style="position: absolute; top: 600px; left: 0px;"> <iframe id="frame2" src="index2.html" align="left" frameborder="0" height="150" scrolling="yes" width="400"></iframe>
+</div>
+
+<div style="position: absolute; top: 0px; left: 400px;"> <iframe id="cam" src="" height="600" width="800"></iframe></div>
+
+<div style="position: absolute; top: 0px; left: 410px;">
+    <p id="error message"></p>
+</div>
+
+<div style="position: absolute; top: 700px; left: 5px;">
+    <audio controls>
+        <source id="audioSrc" src="" type="audio/ogg">
+    </audio>
+</div>
+
+<script>
+    // Below we generate the video stream url and the audio stream url.
+    // This url is deducted from the url of this page.
+    // The assumption is that the video stream port number is one higher and the audio stream port number two higher than the port number of this page.
+    var urlStr = document.URL; // url of this page.
+    urlStr = urlStr.replace(/[^\/]*$/, ""); // strip off indexNonFpv.html
+    var patt = /:([0-9]+)/; // regular expression to filter out the portnumber from the url.
+    if (patt.test(urlStr) == true) {
+        // Execute the regular expression.
+        // The result will contain the last matched characters in index 0 an the first parenthesized substring match in index 1.
+        var res = patt.exec(urlStr);
+        var portNumberPlusOne = (parseInt(res[1]) + 1).toString(); // the first parenthesized substring matches is in index 1
+        var portNumberPlusTwo = (parseInt(res[1]) + 2).toString(); // the first parenthesized substring matches is in index 1
+        var newUrlStrPlusOne = urlStr.replace(res[1],portNumberPlusOne);
+        var newUrlStrPlusTwo = urlStr.replace(res[1],portNumberPlusTwo);
+        document.getElementById("cam").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
+        document.getElementById("audioSrc").src = newUrlStrPlusTwo; // url of the audio stream page
+    } else {
+        //document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
+    }
+</script>
+    
+</body></html>

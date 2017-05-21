@@ -22,6 +22,7 @@ ImgWidth = 800
 ImgHeight = 600
 FpsLq = 2
 FpsHq = 10
+FpsFpv = 5
 DirectionFront = 293.0
 DirectionRight = 25.0
 DirectionBack = 115.0
@@ -607,6 +608,11 @@ personal_assistant.startPersonalAssistant()
 streamStarted = False
 mode = 'DEFAULT'
 prevMode = 'DEFAULT'
+# FPV vatiables
+# Take rounded values of maxSpeed and minSpeed such that rounded increments and decrements will pass the '0' value so we can stop the robot exactly.
+maxSpeed = 62
+minSpeed = -62
+prevSpeedStraight = 0
 while True:
     # Catch exceptions and log them.
     try:
@@ -640,6 +646,22 @@ while True:
                     globMyLog.info('going to start lq stream')
                     if doPrint:
                         print 'going to start lq stream'
+                    time.sleep(0.5)
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                elif cmdList[0] == 'start-fpv':
+                    # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                    globMyLog.info('going to start fpv stream')
+                    if doPrint:
+                        print 'going to start fpv stream'
+                    time.sleep(0.5)
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsFpv) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                elif cmdList[0] == 'stop-fpv':
+                    # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
+                    stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
+                    globMyLog.info('going to stop lq stream')
+                    if doPrint:
+                        print 'going to stop fpv stream'
                     time.sleep(0.5)
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 elif cmdList[0] == 'stop-stream':
@@ -683,8 +705,20 @@ while True:
 
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
                     own_util.move(cmdList[0], cmdList[1], 0, doMove)
-                elif cmdList[0] == 'cam-move':
+                elif cmdList[0] == 'drive':
+                    # Calculate new speed and keep between minSpeed and maxSpeed.
+                    newSpeedStraight = max(min(prevSpeedStraight + int(cmdList[1]), maxSpeed), minSpeed);
+                    own_util.drive(newSpeedStraight, newSpeedStraight, doMove) # Drive straight ahead.
+                    prevSpeedStraight = newSpeedStraight
+                elif cmdList[0] == 'turn':
+                    # Make timeToTurn dependant of current speed.
+                    speedIncrement = int(int(cmdList[1]) / (1.0 + abs(prevSpeedStraight) / float(maxSpeed))) # speedIncrement in range [-62..62]
+                    timeToTurn = 180 # timeToTurn in range [128..255)
+                    own_util.driveAndTurn(prevSpeedStraight, speedIncrement, timeToTurn, doMove)
+                elif cmdList[0] == 'cam-move-rel':
                     own_util.moveCamRel(int(cmdList[1]), 0.1)
+                elif cmdList[0] == 'cam-move-abs':
+                    own_util.moveCamAbs(int(cmdList[1]), 0.1)
                 elif cmdList[0] == 'light-on':
                     own_util.switchLight(True)
                 elif cmdList[0] == 'light-off':

@@ -46,7 +46,7 @@ function handle_command {
     echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
     socketSendAndReceive "${1} ${2}"
     # Handle 'special' cases.
-    if [ "${1}" == "start-stream-hq" ] || [ "${1}" == "start-stream-lq" ] || [ "${1}" == "stop-stream" ] || [ "${1}" == "home-start" ]
+    if [ "${1}" == "start-stream-hq" ] || [ "${1}" == "start-stream-lq" ] || [ "${1}" == "stop-stream" ] || [ "${1}" == "home-start" ] || [ "${1}" == "start-fpv" ] || [ "${1}" == "stop-fpv" ]
     then
         # Force complete page refresh to correctly show the new or stopped MJPEG stream.
         do_refresh_page=true
@@ -123,7 +123,9 @@ elif [ $do_refresh_frame = false ]
 then
     echo -e "Status:304\n"
 else
-    # Send 'index1.html' to the web client, after replacing the 'feedbackstring' with the actual status.
+    # Send 'index2.html' to the web client, after replacing the 'feedbackstring' with the actual status.
+    # This is done for index2.html as this contains the 'feedbackstring' to be replaced by the actual status.
+    # index2.html is at standard input because the form in index2 is sumbittted with <form action="/cgi-bin/dfrobot.sh?/var/www/index2.html" method="POST">.
     echo -e "Content-type: text/html\n"
     while read line
     do
