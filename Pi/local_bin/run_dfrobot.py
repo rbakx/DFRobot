@@ -613,6 +613,7 @@ prevMode = 'DEFAULT'
 maxSpeed = 62
 minSpeed = -62
 prevSpeedStraight = 0
+prevSpeedTurn = 0
 while True:
     # Catch exceptions and log them.
     try:
@@ -706,15 +707,22 @@ while True:
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
                     own_util.move(cmdList[0], cmdList[1], 0, doMove)
                 elif cmdList[0] == 'drive':
-                    # Calculate new speed and keep between minSpeed and maxSpeed.
-                    newSpeedStraight = max(min(prevSpeedStraight + int(cmdList[1]), maxSpeed), minSpeed);
-                    own_util.drive(newSpeedStraight, newSpeedStraight, doMove) # Drive straight ahead.
+                    # Calculate new speed and keep it between minSpeed and maxSpeed.
+                    newSpeedStraight = max(min(prevSpeedStraight + int(cmdList[1]), maxSpeed), minSpeed)
+                    own_util.driveAndTurn(newSpeedStraight, 0, 0, 0, doMove) # Drive straight ahead.
                     prevSpeedStraight = newSpeedStraight
+                    prevSpeedTurn = 0
                 elif cmdList[0] == 'turn':
-                    # Make timeToTurn dependant of current speed.
-                    speedIncrement = int(int(cmdList[1]) / (1.0 + abs(prevSpeedStraight) / float(maxSpeed))) # speedIncrement in range [-62..62]
-                    timeToTurn = 180 # timeToTurn in range [128..255)
-                    own_util.driveAndTurn(prevSpeedStraight, speedIncrement, timeToTurn, doMove)
+                    if prevSpeedStraight == 0:
+                        # If speed is zero interpret the turn command as a continuous turn.
+                        # Calculate new speed and keep it between minSpeed and maxSpeed.
+                        newSpeedTurn = max(min(prevSpeedTurn + int(cmdList[1]), maxSpeed), minSpeed)
+                        own_util.driveAndTurn(prevSpeedStraight, newSpeedTurn, 0, 0, doMove)
+                        prevSpeedTurn = newSpeedTurn
+                    else:
+                        # If speed is not zero interpret the turn command as a temporary turn.
+                        own_util.driveAndTurn(prevSpeedStraight, int(cmdList[1]), 0, 60, doMove)
+                        prevSpeedTurn = 0
                 elif cmdList[0] == 'cam-move-rel':
                     own_util.moveCamRel(int(cmdList[1]), 0.1)
                 elif cmdList[0] == 'cam-move-abs':

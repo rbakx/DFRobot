@@ -97,21 +97,28 @@ def drive(speedLeft, speedRight, doMove):
         i2c.globI2cLock.release()
 
 
-# Drive continuouly. Used for autonomous control.
-def driveAndTurn(speedStraight, speedIncrement, timeToTurn, doMove):
+# The driveAndTurn() function lets the robot drive and turn temporary or infinitely.
+# When speedTurn != 0 it first drives and turns for the specified delay an then continues driving straight ahead for the specified delay.
+# When speedTurn == 0 it only drives straight ahead for the specified delay.
+# speedStraight: [-64..63], where [-64..-1] means backward, 0 means zero speed and [1..63] means forward.
+# speedTurn:     [-64..63], where [-64..-1] means backward, 0 means zero speed and [1..63] means forward.
+# delayDrive: [0..127], where 0 means infinite, 1 means 50 ms and 127 means 1000 ms.
+# delayTurn:  [0..127], where 0 means infinite, 1 means 50 ms and 127 means 1000 ms.
+# doMove: False to disable the actual move, for testing purposes.
+def driveAndTurn(speedStraight, speedTurn, delayDrive, delayTurn, doMove):
     if doMove:
         # Create i2c lock if it does not exist yet.
         i2c.createI2cLock()
         # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
-        # driveAndTurn command.
-        i2c.write_byte(slaveAddressArduino, 0, 6)
-        # driveAndTurn parameters. speedStraight and speedIncrement are in the [-64..63] range, where negative means backward (effectively to the left for negative speedIncrement).
-        # Because the I2C parameters range in the range of 128..255, -64..63 is mapped to 128..255.
-        # At the Arduino side the values are translated into backward and forward direction / increment.
+        # I2C command 1.
+        i2c.write_byte(slaveAddressArduino, 0, 1)
+        # Because the I2C parameters are in the range of [128..255], speed range [-64..63] is mapped to [128..255].
         i2c.write_byte(slaveAddressArduino, 0, speedStraight + 192)
-        i2c.write_byte(slaveAddressArduino, 0, speedIncrement + 192)
-        i2c.write_byte(slaveAddressArduino, 0, timeToTurn)
+        i2c.write_byte(slaveAddressArduino, 0, speedTurn + 192)
+        # Because the I2C parameters are in the range of [128..255], delay range [0..127] is mapped to [128..255].
+        i2c.write_byte(slaveAddressArduino, 0, delayDrive + 128)
+        i2c.write_byte(slaveAddressArduino, 0, delayTurn + 128)
         # Delay for i2c communication.
         time.sleep(i2c.globI2cDelay)
         # Release i2c communication for this thread.
@@ -125,6 +132,7 @@ def moveCamRel(degrees, delay):
             i2c.createI2cLock()
             # Lock i2c communication for this thread.
             i2c.globI2cLock.acquire()
+            # I2C command 10.
             i2c.write_byte(slaveAddressArduino, 0, 10)
             i2c.write_byte(slaveAddressArduino, 0, 128 + int(degrees))
             # Delay for i2c communication.
@@ -136,6 +144,7 @@ def moveCamRel(degrees, delay):
             i2c.createI2cLock()
             # Lock i2c communication for this thread.
             i2c.globI2cLock.acquire()
+            # I2C command 11.
             i2c.write_byte(slaveAddressArduino, 0, 11)
             i2c.write_byte(slaveAddressArduino, 0, 128 - int(degrees))
             # Delay for i2c communication.
@@ -152,6 +161,7 @@ def moveCamAbs(degrees, delay):
         i2c.createI2cLock()
         # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
+        # I2C command 12.
         i2c.write_byte(slaveAddressArduino, 0, 12)
         i2c.write_byte(slaveAddressArduino, 0, 128 + int(degrees))
         # Delay for i2c communication.
@@ -168,6 +178,7 @@ def switchLight(on):
         i2c.createI2cLock()
         # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
+        # I2C command 20.
         i2c.write_byte(slaveAddressArduino, 0, 20)
         # Delay for i2c communication.
         time.sleep(i2c.globI2cDelay)
@@ -178,6 +189,7 @@ def switchLight(on):
         i2c.createI2cLock()
         # Lock i2c communication for this thread.
         i2c.globI2cLock.acquire()
+        # I2C command 21.
         i2c.write_byte(slaveAddressArduino, 0, 21)
         # Delay for i2c communication.
         time.sleep(i2c.globI2cDelay)
@@ -190,6 +202,7 @@ def getBatteryLevel():
     i2c.createI2cLock()
     # Lock i2c communication for this thread.
     i2c.globI2cLock.acquire()
+    # Going to read I2C data.
     i2c.write_byte(slaveAddressArduino, 0, 0)
     level = i2c.read_byte(slaveAddressArduino, 0)
     # Delay for i2c communication.
