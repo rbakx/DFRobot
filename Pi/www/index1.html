@@ -50,8 +50,8 @@
     
 <script language="javascript" type="text/javascript">
 var speed = "fast";
-var speedDrive = "200";
-var speedTurn = "160";
+var speedDrive = "72";
+var speedTurn = "32";
 function onRefresh() {
     // First make sure localStorage items are available.
     if (localStorage.getItem("speed") == null)
@@ -80,15 +80,15 @@ function onRefresh() {
 function toggleSpeed(elem) {
     if(speed == "slow") {
         speed = "fast";
-        speedDrive = "200"
-        speedTurn = "160"
+        speedDrive = "72"
+        speedTurn = "32"
         elem.style.backgroundColor="red";
         elem.value="fast";
     }
     else {
         speed = "slow";
-        speedDrive = "140"
-        speedTurn = "135"
+        speedDrive = "12"
+        speedTurn = "7"
         elem.style.backgroundColor="green";
         elem.value="slow";
     }

@@ -51,61 +51,28 @@ def ownReboot(reason):
 
 
 # Move for a short distance. Used for safe remote control.
-def move(direction, speed, delay, doMove):
+def move(direction, delayMove, delayAfterMove, doMove):
     if doMove:
         if direction == 'forward':
-            dir = 1
+            driveAndTurn(63, 0, delayMove, 0, delayAfterMove, doMove)
         elif direction == 'backward':
-            dir = 2
+            driveAndTurn(-63, 0, delayMove, 0, delayAfterMove, doMove)
         elif direction == 'left':
-            dir = 3
+            driveAndTurn(0, -63, 0, delayMove, delayAfterMove, doMove)
         elif direction == 'right':
-            dir = 4
-        else:
-            dir = 0
-        # Create i2c lock if it does not exist yet.
-        i2c.createI2cLock()
-        # Lock i2c communication for this thread.
-        i2c.globI2cLock.acquire()
-        i2c.write_byte(slaveAddressArduino, 0, dir)
-        i2c.write_byte(slaveAddressArduino, 0, int(speed))
-        # Delay for i2c communication.
-        time.sleep(i2c.globI2cDelay)
-        # Release i2c communication for this thread.
-        i2c.globI2cLock.release()
-    # Still delay when doMove == False to have similar timing.
-    time.sleep(delay)
-
-
-# Drive continuouly. Used for autonomous control.
-def drive(speedLeft, speedRight, doMove):
-    if doMove:
-        # Create i2c lock if it does not exist yet.
-        i2c.createI2cLock()
-        # Lock i2c communication for this thread.
-        i2c.globI2cLock.acquire()
-        # Drive command.
-        i2c.write_byte(slaveAddressArduino, 0, 5)
-        # Drive parameters. SpeedLeft and speedRight are in the [-64..63] range, where negative means backward.
-        # Because the I2C parameters range in the range of 128..255, -64..63 is mapped to 128..255.
-        # At the Arduino side the values are translated into backward and forward direction.
-        i2c.write_byte(slaveAddressArduino, 0, speedLeft + 192)
-        i2c.write_byte(slaveAddressArduino, 0, speedRight + 192)
-        # Delay for i2c communication.
-        time.sleep(i2c.globI2cDelay)
-        # Release i2c communication for this thread.
-        i2c.globI2cLock.release()
+            driveAndTurn(0, 63, 0, delayMove, delayAfterMove, doMove)
 
 
 # The driveAndTurn() function lets the robot drive and turn temporary or infinitely.
 # When speedTurn != 0 it first drives and turns for the specified delay an then continues driving straight ahead for the specified delay.
 # When speedTurn == 0 it only drives straight ahead for the specified delay.
-# speedStraight: [-64..63], where [-64..-1] means backward, 0 means zero speed and [1..63] means forward.
-# speedTurn:     [-64..63], where [-64..-1] means backward, 0 means zero speed and [1..63] means forward.
+# speedStraight: [-63..63], where [-63..-1] means backward, 0 means zero speed and [1..63] means forward.
+# speedTurn:     [-63..63], where [-63..-1] means backward, 0 means zero speed and [1..63] means forward.
 # delayDrive: [0..127], where 0 means infinite, 1 means 50 ms and 127 means 1000 ms.
 # delayTurn:  [0..127], where 0 means infinite, 1 means 50 ms and 127 means 1000 ms.
+# delayAfterMove is used in autonomous mode to synchronize the python script with the movements and camera stabilization of the robot.
 # doMove: False to disable the actual move, for testing purposes.
-def driveAndTurn(speedStraight, speedTurn, delayDrive, delayTurn, doMove):
+def driveAndTurn(speedStraight, speedTurn, delayDrive, delayTurn, delayAfterMove, doMove):
     if doMove:
         # Create i2c lock if it does not exist yet.
         i2c.createI2cLock()
@@ -113,7 +80,8 @@ def driveAndTurn(speedStraight, speedTurn, delayDrive, delayTurn, doMove):
         i2c.globI2cLock.acquire()
         # I2C command 1.
         i2c.write_byte(slaveAddressArduino, 0, 1)
-        # Because the I2C parameters are in the range of [128..255], speed range [-64..63] is mapped to [128..255].
+        # Because the I2C parameters are in the range of [128..255], speed range [-63..63] is mapped to [129..255].
+        # Start with 129 to keep backward / forward or left / right symmetry around 192.
         i2c.write_byte(slaveAddressArduino, 0, speedStraight + 192)
         i2c.write_byte(slaveAddressArduino, 0, speedTurn + 192)
         # Because the I2C parameters are in the range of [128..255], delay range [0..127] is mapped to [128..255].
@@ -123,6 +91,8 @@ def driveAndTurn(speedStraight, speedTurn, delayDrive, delayTurn, doMove):
         time.sleep(i2c.globI2cDelay)
         # Release i2c communication for this thread.
         i2c.globI2cLock.release()
+    # Still delay when doMove == False to have similar timing.
+    time.sleep(delayAfterMove)
 
 
 def moveCamRel(degrees, delay):

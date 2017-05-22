@@ -111,11 +111,11 @@ void loop()
         // i2cParameters[3]: time to turn  [128..255], where 128 means infinite, 129 means 50 ms and 255 means 1000 ms.
         boolean directionBackward;
         int speedStraight;
-        // For speedTurn we do not use the map function to keep it symmetric around 0 as it originated from 192+[-64..63] = [128..255].
-        int speedTurn = (i2cParameters[1] - 192) * 4; // map speedTurn back to 4*[-64..63] = [-256..252]
+        // For speedTurn we do not use the map function to keep it symmetric around 0 as it originated from 192+[-63..63] = [129..255].
+        int speedTurn = (i2cParameters[1] - 192) * 4; // map speedTurn back to 4*[-63..63] = [-252..252]
         int delayDrive = i2cParameters[2] > 128 ? map(i2cParameters[2], 129, 255, 50, 1000): 0; // For value 128 make delay zero to indicate infinite.
-        int delayTurn = i2cParameters[3] > 128 ? map(i2cParameters[2], 129, 255, 50, 1000): 0;  // For value 128 make delay zero to indicate infinite.
-        
+        int delayTurn = i2cParameters[3] > 128 ? map(i2cParameters[3], 129, 255, 50, 1000): 0;  // For value 128 make delay zero to indicate infinite.
+
         if (i2cParameters[0] < 192) {
           // Backward.
           directionBackward = true; // backward left wheels
@@ -128,14 +128,21 @@ void loop()
         }
         if (speedTurn != 0) {
           // If we have to turn we do this first for turnDelay ms.
-          // Keep motor speed values between 0 and 255.
-          int speed1 = max(min(speedStraight + speedTurn,255),-255);
-          int speed2 = max(min(speedStraight - speedTurn,255),-255);
+          int speed1 = speedStraight + speedTurn;
+          int speed2 = speedStraight - speedTurn;
+          // Because of speedTurn it can now be that one of the speeds is above 255 or below 0.
+          // In this case we shift both speeds back into the [0..255] range such that we do not have to clip the speeds and the difference is still speedTurn.
+          // This way the steering behavior will be the same for all speeds.
+          if (speed1 > 255 || speed2 > 255) {
+            int shift = max(speed1, speed2) - 255;
+            speed1 = speed1 - shift;
+            speed2 = speed2 - shift;
+          }
           // If speed is negative, we have to inverse the direction.
           bool dir1 = speed1 >= 0 ? directionBackward : !directionBackward;
           bool dir2 = speed2 >= 0 ? directionBackward : !directionBackward;
-          Motor1(speed1, dir1);
-          Motor2(speed2, dir2);
+          Motor1(abs(speed1), dir1);
+          Motor2(abs(speed2), dir2);
           if (delayTurn != 0) {
             delay(delayTurn);
           }

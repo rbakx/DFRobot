@@ -7,28 +7,19 @@
 <div style="position: absolute; top: 0px; left: 0px;"> <iframe id="cam1" src="" height="600" width="800"></iframe></div>
 <div style="position: absolute; top: 0px; left: 800px;"> <iframe id="cam2" src="" height="600" width="800"></iframe></div>
     
-    <div style="position: absolute; top: 0px; left: 200px;">
+<div style="position: absolute; top: 0px; left: 200px;">
     <p id="error message"></p>
 </div>
-<div style="font-size: 24px; color:yellow; position: absolute; top: 100px; left: 400px;">
+<div style="font-size: 48px; color:yellow; position: absolute; top: 100px; left: 400px;">
     <p id="message1"></p>
 </div>
-<div style="font-size: 24px; color:yellow; position: absolute; top: 140px; left: 200px;">
-    <p id="message2"></p>
-</div>
-<div style="font-size: 24px; color:yellow; position: absolute; top: 160px; left: 200px;">
-    <p id="message3"></p>
-</div>
-<div style="font-size: 24px; color:yellow; position: absolute; top: 180px; left: 200px;">
-    <p id="message4"></p>
-</div>
     
-<form action="/cgi-bin/dfrobot.sh" method="POST">
+<form action="/cgi-bin/dfrobot.sh" method="POST" style="display: none">
     <button id="button-tilt" name="cmd" value="cam-move-abs.0"></button>
-    <button id="button-forward" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 30px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="drive.31"></button>
-    <button id="button-left" style="width: 100px; height: 100px; position: absolute; left: 50px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="turn.-62"></button>
-    <button id="button-right" style="width: 100px; height: 100px; position: absolute; left: 250px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="turn.62"></button>
-    <button id="button-backward" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 230px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="drive.-31"></button>
+    <button id="button-forward" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 30px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="drive-inc.31"></button>
+    <button id="button-left" style="width: 100px; height: 100px; position: absolute; left: 50px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="turn-inc.-31"></button>
+    <button id="button-right" style="width: 100px; height: 100px; position: absolute; left: 250px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="turn-inc.31"></button>
+    <button id="button-backward" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 230px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="drive-inc.-31"></button>
 </form>
 
     
@@ -52,7 +43,7 @@ if (patt.test(urlStr) == true) {
     document.getElementById("cam1").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
     document.getElementById("cam2").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
 } else {
-    //document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
+    document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
 }
 
 var previousDecoupledAlpha = 0; // For left - right motion.

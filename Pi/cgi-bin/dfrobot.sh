@@ -9,7 +9,7 @@ globSocketMessageReceived=""
 # Function to send a udp socket message to the server and receive the reply.
 function socketSendAndReceive {
     # Open socket and redirect to filedescriptor #3
-    exec 3<>/dev/udp/localhost/12345
+    exec 3<>/dev/udp/localhost/42420
     # Send message (first parameter) to socket.
     echo -n ${1} > /dev/null 2>&1 >&3
     # Read message back from socket into globSocketMessageReceived, with a timeout of 0.5 second.

@@ -214,10 +214,10 @@ def homeRun():
                 if correction > 1.5:  # we have to turn to the left, move forward and then turn back again
                     if doPrint:
                         print '********** Going to do approach correction to the left.'
-                    own_util.move('left', 240 - correction * 1, 1.0, doMove)
-                    own_util.move('forward', 128 + correction * 2, 1.0, doMove)
+                    own_util.move('left', 12 - correction * 1, 1.0, doMove)
+                    own_util.move('forward', correction * 2, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
-                    own_util.move('right', 240 - correction * 1, 5.0, doMove)
+                    own_util.move('right', 112 - correction * 1, 5.0, doMove)
                     # approach correction finished
                     correctApproachAngle = False
                     if doPrint:
@@ -225,10 +225,10 @@ def homeRun():
                 elif correction < -1.5:  # we have to turn to the right, move forward and then turn back again
                     if doPrint:
                         print 'Going to do approach correction to the right.'
-                    own_util.move('right', 240 + correction * 1, 1.0, doMove)
-                    own_util.move('forward', 128 - correction * 2, 1.0, doMove)
+                    own_util.move('right', 112 + correction * 1, 1.0, doMove)
+                    own_util.move('forward', correction * 2, 1.0, doMove)
                     # move back towards target and wait a bit longer for the image to stabilize
-                    own_util.move('left', 240 + correction * 1, 5.0, doMove)
+                    own_util.move('left', 112 + correction * 1, 5.0, doMove)
                     # approach correction finished
                     correctApproachAngle = False
                     if doPrint:
@@ -257,16 +257,16 @@ def homeRun():
                     if doPrint:
                         print 'turn left'
                     if xmid < course - ImgWidth / 5.0:
-                        own_util.move('left', 140, 1.0, doMove)
+                        own_util.move('left', 12, 1.0, doMove)
                     else:
-                        own_util.move('left', 128, 1.0, doMove)
+                        own_util.move('left', 1, 1.0, doMove)
                 elif xmid > course + ImgWidth / 20.0:
                     if doPrint:
                         print 'turn right'
                     if xmid > course + ImgWidth / 5.0:
-                        own_util.move('right', 140, 1.0, doMove)
+                        own_util.move('right', 12, 1.0, doMove)
                     else:
-                        own_util.move('right', 128, 1.0, doMove)
+                        own_util.move('right', 1, 1.0, doMove)
                 elif abs(correction) > 2.0 and avgSizeBlobLeftBlobRight > SizeMinForCorrection and avgSizeBlobLeftBlobRight < SizeMaxForCorrection:
                     correctApproachAngle = True
                 else:
@@ -274,15 +274,15 @@ def homeRun():
                         if doPrint:
                             print 'move forward'
                         if avgSizeBlobLeftBlobRight < SizeSlow:
-                            own_util.move('forward', 160, 1.0, doMove)
+                            own_util.move('forward', 32, 1.0, doMove)
                         else:
-                            own_util.move('forward', 140, 1.0, doMove)
+                            own_util.move('forward', 12, 1.0, doMove)
                     else:
                         # Make one more additional move towards the garage before turning 180 degrees.
-                        own_util.move('forward', 180, 1.0, doMove)
+                        own_util.move('forward', 52, 1.0, doMove)
                         compass.gotoDegreeRel(180, doMove)
                         for i in range(0, 8):
-                            own_util.move('backward', 140, 1.0, doMove)
+                            own_util.move('backward', 12, 1.0, doMove)
                         globMyLog.info('Home found!')
                         globContinueCapture = False
 
@@ -290,12 +290,12 @@ def homeRun():
                 if doPrint:
                     print '**********', len(sortedBlobs), 'Blobs found, but not valid.'
                     print 'turn left'
-                own_util.move('left', 150, 1.0, doMove)
+                own_util.move('left', 22, 1.0, doMove)
             else:
                 if doPrint:
                     print '********** No blobs found.'
                     print 'turn left'
-                own_util.move('left', 150, 1.0, doMove)
+                own_util.move('left', 22, 1.0, doMove)
 
             for blob in sortedBlobs:
                 x = blob.pt[0]
@@ -703,16 +703,15 @@ while True:
                     homeRun()
                     # Upload homerun video to Telegram.
                     communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your homerun video!')
-
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
-                    own_util.move(cmdList[0], cmdList[1], 0, doMove)
-                elif cmdList[0] == 'drive':
+                    own_util.move(cmdList[0], int(cmdList[1]), 0, doMove)
+                elif cmdList[0] == 'drive-inc':
                     # Calculate new speed and keep it between minSpeed and maxSpeed.
                     newSpeedStraight = max(min(prevSpeedStraight + int(cmdList[1]), maxSpeed), minSpeed)
                     own_util.driveAndTurn(newSpeedStraight, 0, 0, 0, doMove) # Drive straight ahead.
                     prevSpeedStraight = newSpeedStraight
                     prevSpeedTurn = 0
-                elif cmdList[0] == 'turn':
+                elif cmdList[0] == 'turn-inc':
                     if prevSpeedStraight == 0:
                         # If speed is zero interpret the turn command as a continuous turn.
                         # Calculate new speed and keep it between minSpeed and maxSpeed.
@@ -735,10 +734,10 @@ while True:
                     # Switch on light if needed
                     if globBrightness < 60:
                         own_util.switchLight(True)
-                    own_util.move('forward', 200, 1.0, doMove)
-                    own_util.move('forward', 200, 1.0, doMove)
-                    own_util.move('left', 160, 1.0, doMove)
-                    own_util.move('forward', 200, 1.0, doMove)
+                    own_util.move('forward', 72, 1.0, doMove)
+                    own_util.move('forward', 72, 1.0, doMove)
+                    own_util.move('left', 32, 1.0, doMove)
+                    own_util.move('forward', 72, 1.0, doMove)
                     # Demo Home run, no upload of video.
                     globMyLog.info('going to start Home run')
                     if doPrint:
@@ -762,9 +761,9 @@ while True:
                     # Switch on light if needed
                     if globBrightness < 60:
                         own_util.switchLight(True)
-                    own_util.move('forward', 200, 1.0, doMove)
-                    own_util.move('forward', 200, 1.0, doMove)
-                    own_util.drive(63, 63, doMove)
+                    own_util.move('forward', 72, 1.0, doMove)
+                    own_util.move('forward', 72, 1.0, doMove)
+                    own_util.driveAndTurn(63, 0, 0, 0, doMove)
                 elif cmdList[0] == 'stop':
                     prevMode = mode
                     mode = 'STOP'
@@ -812,14 +811,14 @@ while True:
                 prevMode = mode
                 mode = 'STOP'
             elif personal_assistant.globDistance > 0 and personal_assistant.globDistance < 60:
-                own_util.move('left', 200, 1.0, doMove)
+                own_util.move('left', 72, 1.0, doMove)
             else:
-                own_util.drive(63, 63, doMove)
+                own_util.driveAndTurn(63, 0, 0, 0, doMove)
         elif mode == 'STOP':
             globMyLog.info('going to stop action')
             if doPrint:
                 print 'going to stop action'
-            own_util.drive(0, 0, True)
+            own_util.driveAndTurn(0, 0, 0, 0, doMove)
             own_util.switchLight(False)
             if prevMode == 'PATROL':
                 if doPrint:

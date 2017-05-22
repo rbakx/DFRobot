@@ -161,7 +161,7 @@ def socketServer():
     global globCmd
     # We use a UDP socket here as we send small control commands and real time data.
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)         # Create a socket object.
-    port = 12345                # Reserve a port for your service.
+    port = 42420 # Reserve a port for your service.
     s.bind(('', port)) # Bind to any host and specific port.
     # Set socket timeout to prevent the s.accept() call from blocking.
     # Instead it will generate a 'timed out' exception.
