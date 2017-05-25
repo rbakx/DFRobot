@@ -43,8 +43,8 @@ function handle_command {
     fi
 
     # Send the command with possible parameter to the communication socket.
-    echo "***** $(date), $prompt: '${1} ${2}' command received" >> /home/pi/log/dfrobot_log.txt
-    socketSendAndReceive "${1} ${2}"
+    echo "***** $(date), $prompt: '${1}' command received" >> /home/pi/log/dfrobot_log.txt
+    socketSendAndReceive "${1}"
     # Handle 'special' cases.
     if [ "${1}" == "start-stream-hq" ] || [ "${1}" == "start-stream-lq" ] || [ "${1}" == "stop-stream" ] || [ "${1}" == "home-start" ] || [ "${1}" == "start-fpv" ] || [ "${1}" == "stop-fpv" ]
     then
@@ -84,10 +84,10 @@ then
     # <value> contains a command and possibly a parameter, separated by a dot. For example 'cam-move.30'.
     # Filter out the command and parameter and store it in $COMMAND and $PARAMETER respectively.
     COMMAND_PLUS_PARAMETER="$(echo $POST_STRING | sed -n 's/^.*cmd=\([^ ]*\).*$/\1/p')"
-    COMMAND="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/\([^.]*\).*$/\1/p')"
-    PARAMETER="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/[^.]*\.\(.*$\)/\1/p')"
+    COMMAND="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/\([^.]*\).*$/\1/p')"     # Not used at the moment.
+    PARAMETER="$(echo $COMMAND_PLUS_PARAMETER | sed -n 's/[^.]*\.\(.*$\)/\1/p')" # Not used at the moment.
     # Call command handler.
-    handle_command $COMMAND $PARAMETER
+    handle_command $COMMAND_PLUS_PARAMETER
 fi
 
 # Now we must return a valid HTTP header to the client, otherwise an "Internal Server Error" will be generated.

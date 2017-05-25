@@ -15,6 +15,7 @@
 </div>
     
 <form action="/cgi-bin/dfrobot.sh" method="POST" style="display: none">
+    <button id="button-fpv-alive" name="cmd" value="fpv-alive"></button>
     <button id="button-tilt" name="cmd" value="cam-move-abs.0"></button>
     <button id="button-forward" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 30px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="drive-inc.31"></button>
     <button id="button-left" style="width: 100px; height: 100px; position: absolute; left: 50px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="turn-inc.-31"></button>
@@ -46,11 +47,12 @@ if (patt.test(urlStr) == true) {
     document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
 }
 
+const countDownDelay = 15000;
+const deltaTime = 100;
 var previousDecoupledAlpha = 0; // For left - right motion.
 var previousDecoupledGamma = 0; // For up - down motion.
 var previousTime = 0;
-var skip = false;
-var delta = 100;
+var skipCount = 0;
 var decoupledAlpha = 0; // Decoupled here means decoupled from gamma, so no jump when gamma becomes negative.
 var decoupledGamma = 0; // Decoupled here means no jump from +90 to -90 and range 0..180.
 var cameraTilt = 0; // tilt of the camera, 0 .. 3.
@@ -83,40 +85,36 @@ function deviceOrientationHandler(event) {
     //document.getElementById("message1").innerHTML = event.alpha.toString();
     //document.getElementById("message2").innerHTML = event.beta.toString();
     //document.getElementById("message3").innerHTML = event.gamma.toString();
-    // Measure once every delta milliseconds.
+    // Measure once every deltaTime milliseconds.
     // firstTime is used to only activate after 10 seconds after first entereing here (either by switching to FPV mode or a page refresh).
     // This to give the user the chance to put phone in the VR viewer.
-    var n = new Date().getTime();
-    if (n - firstTime > 10000 && n - previousTime > delta) {
+    var newTime = new Date().getTime();
+    if (newTime - firstTime > countDownDelay && newTime - previousTime > deltaTime) {
         if (fpvActive == true) {
-            // After a valid movement is measure skip will be set to true and delta to a higher value to give the user chance to move his head back.
-            if (skip == false) {
+            // After a valid movement is measure skip will be set to true and deltaTime to a higher value to give the user chance to move his head back.
+            if (skipCount == 0) {
                 if (alphaDelta > 2.0) {
                     // valid left movement.
                     document.getElementById("message1").innerHTML = "left";
-                    skip = true;
-                    delta = 1000;
+                    skipCount = 10;
                     document.getElementById("button-left").click();
                 }
                 else if (alphaDelta < -2.0) {
                     // valid right movement.
                     document.getElementById("message1").innerHTML = "right";
-                    skip = true;
-                    delta = 1000;
+                    skipCount = 10;
                     document.getElementById("button-right").click();
                 }
                 else if (gammaDelta > 4.0) {
                     // valid down movement.
                     document.getElementById("message1").innerHTML = "down";
-                    skip = true;
-                    delta = 1000;
+                    skipCount = 10;
                     document.getElementById("button-backward").click();
                 }
                 else if (gammaDelta < -4.0) {
                     // valid up movement.
                     document.getElementById("message1").innerHTML = "up";
-                    skip = true;
-                    delta = 1000;
+                    skipCount = 10;
                     document.getElementById("button-forward").click();
                 }
                 else {
@@ -130,26 +128,30 @@ function deviceOrientationHandler(event) {
                         document.getElementById("button-tilt").click();
                         cameraPreviousTilt = cameraTilt;
                     }
+                    else {
+                        document.getElementById("button-fpv-alive").click();
+                    }
                 }
             }
             else {
-                // User moved his head back, so back to normal operation.
-                skip = false;
-                delta = 100;
+                // We are skipping some FPV frames to give the user time to move his head back.
+                // We have still to send the "fpv-alive" message.
+                document.getElementById("button-fpv-alive").click();
+                skipCount = skipCount - 1;
             }
         }
         else {
             document.getElementById("message1").innerHTML = "not active";
         }
-        previousTime = n;
+        previousTime = newTime;
         previousDecoupledAlpha = decoupledAlpha;
         previousDecoupledGamma = decoupledGamma;        
     }
-    else if (n - firstTime < 10000) {
-        // Cout down.
-        document.getElementById("message1").innerHTML = "countdown: " + Math.round(10 - (n - firstTime) / 1000);
+    else if (newTime - firstTime < countDownDelay) {
+        // Count down.
+        document.getElementById("message1").innerHTML = "countdown: " + Math.round((countDownDelay - (newTime - firstTime)) / 1000);
         // Assign previous values until countdown is finished to prevent robot from moving immediately after countdown.
-        previousTime = n;
+        previousTime = newTime;
         previousDecoupledAlpha = decoupledAlpha;
         previousDecoupledGamma = decoupledGamma;        
     }

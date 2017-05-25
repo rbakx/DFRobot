@@ -612,8 +612,9 @@ prevMode = 'DEFAULT'
 # Take rounded values of maxSpeed and minSpeed such that rounded increments and decrements will pass the '0' value so we can stop the robot exactly.
 maxSpeed = 62
 minSpeed = -62
+turnSpeedFactorWhenStandingStill = 1.5
 prevSpeedStraight = 0
-prevSpeedTurn = 0
+lastTimeFpvConnectionAlive = 0.0
 while True:
     # Catch exceptions and log them.
     try:
@@ -621,8 +622,16 @@ while True:
         # like the socketServer thread will not run at regular times.
         time.sleep(0.001)
         if communication.globInteractive == True or personal_assistant.globInteractive == True:
-            # Intearctive command received.
-            expr = re.compile('(.+?)(?:$| )')
+            
+            # Check if FPV mode is active and if FPV connection with robot is still alive. If not stop driving!
+            if lastTimeFpvConnectionAlive != 0:
+                if time.time() - lastTimeFpvConnectionAlive > 1.0: # If time since last alive message > 1 second.
+                    own_util.driveAndTurn(0, 0, 0, 0, 0, doMove)   # Stop driving.
+                    prevSpeedStraight = 0
+
+            # Intearctive command received. This command looks like "drive-and-turn.0.31".
+            # The below regular expression will separate the command on the dots so the result will be an tuple ["drive-and-turn", "0", "31"].
+            expr = re.compile('(.+?)(?:$|\.)')
             if communication.globInteractive == True:
                 cmdList = expr.findall(communication.globCmd)
             else:
@@ -705,23 +714,24 @@ while True:
                     communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your homerun video!')
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
                     own_util.move(cmdList[0], int(cmdList[1]), 0, doMove)
+                elif cmdList[0] == 'fpv-alive':
+                    lastTimeFpvConnectionAlive = time.time()
                 elif cmdList[0] == 'drive-inc':
                     # Calculate new speed and keep it between minSpeed and maxSpeed.
                     newSpeedStraight = max(min(prevSpeedStraight + int(cmdList[1]), maxSpeed), minSpeed)
-                    own_util.driveAndTurn(newSpeedStraight, 0, 0, 0, doMove) # Drive straight ahead.
+                    own_util.driveAndTurn(newSpeedStraight, 0, 0, 0, 0, doMove) # Drive straight ahead.
                     prevSpeedStraight = newSpeedStraight
-                    prevSpeedTurn = 0
+                    lastTimeFpvConnectionAlive = time.time()
                 elif cmdList[0] == 'turn-inc':
+                    turnSpeed = int(cmdList[1])
                     if prevSpeedStraight == 0:
-                        # If speed is zero interpret the turn command as a continuous turn.
-                        # Calculate new speed and keep it between minSpeed and maxSpeed.
-                        newSpeedTurn = max(min(prevSpeedTurn + int(cmdList[1]), maxSpeed), minSpeed)
-                        own_util.driveAndTurn(prevSpeedStraight, newSpeedTurn, 0, 0, doMove)
-                        prevSpeedTurn = newSpeedTurn
-                    else:
-                        # If speed is not zero interpret the turn command as a temporary turn.
-                        own_util.driveAndTurn(prevSpeedStraight, int(cmdList[1]), 0, 60, doMove)
-                        prevSpeedTurn = 0
+                        # When standing still a higher turning speed is needed.
+                        turnSpeed = int(int(cmdList[1]) * turnSpeedFactorWhenStandingStill)
+                    own_util.driveAndTurn(prevSpeedStraight, turnSpeed, 0, 60, 0, doMove)
+                    lastTimeFpvConnectionAlive = time.time()
+                elif cmdList[0] == 'drive-and-turn': # Not used at the moment but left in for illustration.
+                    own_util.driveAndTurn(cmdList[1], cmdList[2], 0, 0, 0, doMove);
+                    lastTimeFpvConnectionAlive = time.time()
                 elif cmdList[0] == 'cam-move-rel':
                     own_util.moveCamRel(int(cmdList[1]), 0.1)
                 elif cmdList[0] == 'cam-move-abs':
@@ -771,7 +781,7 @@ while True:
                 # Command handled, so make empty.
                 communication.globCmd = ''
                 personal_assistant.globCmd = ''
-
+    
         elif mode == 'DEFAULT':
             # Default mode runs means captureAndMotionDetection mode. This mode stops when there is interaction.
             if streamStarted == False:
