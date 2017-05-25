@@ -128,15 +128,15 @@ function deviceOrientationHandler(event) {
                         document.getElementById("button-tilt").click();
                         cameraPreviousTilt = cameraTilt;
                     }
-                    else {
-                        document.getElementById("button-fpv-alive").click();
-                    }
+                    //else {
+                        //document.getElementById("button-fpv-alive").click();
+                    //}
                 }
             }
             else {
                 // We are skipping some FPV frames to give the user time to move his head back.
                 // We have still to send the "fpv-alive" message.
-                document.getElementById("button-fpv-alive").click();
+                //document.getElementById("button-fpv-alive").click();
                 skipCount = skipCount - 1;
             }
         }

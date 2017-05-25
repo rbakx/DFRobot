@@ -591,7 +591,7 @@ def handleIntent(intent, value, client):
             if value == "hits":
                 station = 'http://87.118.122.45:30710'
             elif value == "salsa":
-                station = 'http://50.7.56.2:8020'
+                station = 'http://138.201.248.93/salsa'
             elif value == "christmas":
                 station = 'http://live.icecast.kpnstreaming.nl/skyradiolive-SRGSTR08.mp3'
             elif value == "spanish":

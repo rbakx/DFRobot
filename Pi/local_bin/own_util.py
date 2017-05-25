@@ -82,11 +82,11 @@ def driveAndTurn(speedStraight, speedTurn, delayDrive, delayTurn, delayAfterMove
         i2c.write_byte(slaveAddressArduino, 0, 1)
         # Because the I2C parameters are in the range of [128..255], speed range [-63..63] is mapped to [129..255].
         # Start with 129 to keep backward / forward or left / right symmetry around 192.
-        i2c.write_byte(slaveAddressArduino, 0, speedStraight + 192)
-        i2c.write_byte(slaveAddressArduino, 0, speedTurn + 192)
+        i2c.write_byte(slaveAddressArduino, 0, int(speedStraight) + 192)
+        i2c.write_byte(slaveAddressArduino, 0, int(speedTurn) + 192)
         # Because the I2C parameters are in the range of [128..255], delay range [0..127] is mapped to [128..255].
-        i2c.write_byte(slaveAddressArduino, 0, delayDrive + 128)
-        i2c.write_byte(slaveAddressArduino, 0, delayTurn + 128)
+        i2c.write_byte(slaveAddressArduino, 0, int(delayDrive) + 128)
+        i2c.write_byte(slaveAddressArduino, 0, int(delayTurn) + 128)
         # Delay for i2c communication.
         time.sleep(i2c.globI2cDelay)
         # Release i2c communication for this thread.

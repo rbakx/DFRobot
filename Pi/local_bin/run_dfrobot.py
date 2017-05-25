@@ -214,10 +214,11 @@ def homeRun():
                 if correction > 1.5:  # we have to turn to the left, move forward and then turn back again
                     if doPrint:
                         print '********** Going to do approach correction to the left.'
-                    own_util.move('left', 12 - correction * 1, 1.0, doMove)
-                    own_util.move('forward', correction * 2, 1.0, doMove)
-                    # move back towards target and wait a bit longer for the image to stabilize
-                    own_util.move('right', 112 - correction * 1, 5.0, doMove)
+                    # Rotate left 90 degrees minus a correction dependant on the sideways displacement.
+                    own_util.move('left', 112 - correction * 1, 1.0, doMove)
+                    own_util.move('forward', correction * 3, 1.0, doMove)
+                    # Rotate back 90 degrees towards target. We do not use a correction here because we have to rotate a bit further back to the target.
+                    own_util.move('right', 112, 5.0, doMove)
                     # approach correction finished
                     correctApproachAngle = False
                     if doPrint:
@@ -225,10 +226,11 @@ def homeRun():
                 elif correction < -1.5:  # we have to turn to the right, move forward and then turn back again
                     if doPrint:
                         print 'Going to do approach correction to the right.'
+                    # Rotate right 90 degrees minus a correction dependant on the sideways displacement.
                     own_util.move('right', 112 + correction * 1, 1.0, doMove)
-                    own_util.move('forward', correction * 2, 1.0, doMove)
-                    # move back towards target and wait a bit longer for the image to stabilize
-                    own_util.move('left', 112 + correction * 1, 5.0, doMove)
+                    own_util.move('forward', -correction * 3, 1.0, doMove)
+                    # Rotate back 90 degrees towards target. We do not use a correction here because we have to rotate a bit further back to the target.
+                    own_util.move('left', 112, 5.0, doMove)
                     # approach correction finished
                     correctApproachAngle = False
                     if doPrint:
@@ -624,10 +626,10 @@ while True:
         if communication.globInteractive == True or personal_assistant.globInteractive == True:
             
             # Check if FPV mode is active and if FPV connection with robot is still alive. If not stop driving!
-            if lastTimeFpvConnectionAlive != 0:
-                if time.time() - lastTimeFpvConnectionAlive > 1.0: # If time since last alive message > 1 second.
-                    own_util.driveAndTurn(0, 0, 0, 0, 0, doMove)   # Stop driving.
-                    prevSpeedStraight = 0
+            #if lastTimeFpvConnectionAlive != 0:
+            #if time.time() - lastTimeFpvConnectionAlive > 1.0: # If time since last alive message > 1 second.
+                    #own_util.driveAndTurn(0, 0, 0, 0, 0, doMove)   # Stop driving.
+                    #prevSpeedStraight = 0
 
             # Intearctive command received. This command looks like "drive-and-turn.0.31".
             # The below regular expression will separate the command on the dots so the result will be an tuple ["drive-and-turn", "0", "31"].
