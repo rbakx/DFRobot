@@ -9,10 +9,16 @@ import inspect
 import logging
 import numpy as np
 import i2c
+import own_gpio
 
 
 # Global variables.
 slaveAddressArduino = 0x04
+globUptime = 0
+globBatteryLevel = 0
+globIsCharging = False
+globWifiLevel = 0
+globDistance = 1000
 
 
 # runShellCommandWait(cmd) will block until 'cmd' is finished.
@@ -167,33 +173,22 @@ def switchLight(on):
         i2c.globI2cLock.release()
 
 
-def getBatteryLevel():
+def updateBatteryLevel():
+    global globBatteryLevel
     # Create i2c lock if it does not exist yet.
     i2c.createI2cLock()
     # Lock i2c communication for this thread.
     i2c.globI2cLock.acquire()
     # Going to read I2C data.
     i2c.write_byte(slaveAddressArduino, 0, 0)
-    level = i2c.read_byte(slaveAddressArduino, 0)
+    globBatteryLevel = i2c.read_byte(slaveAddressArduino, 0)
     # Delay for i2c communication.
     time.sleep(i2c.globI2cDelay)
     # Release i2c communication for this thread.
     i2c.globI2cLock.release()
-    return level
 
 
-def getWifiStatus():
-    stdOutAndErr = runShellCommandWait('/sbin/iwconfig')
-    # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
-    expr = re.compile('.*ESSID:"(.*)".*?Signal level=(.*dBm)', re.DOTALL)
-    m = expr.match(stdOutAndErr)
-    if m is not None:  # m will be not None only when both capture groups are valid.
-        return m.group(1) + ': ' + m.group(2)
-    else:
-        return 'wifi unknown'
-
-
-# Global variables for getBatteryLevel(), used as static variables.
+# Global variables used as static variables.
 # globBatteryLevels is a circular buffer of 30 battery values, initialized on battery level 200.
 globBatteryLevels = np.ones(30) * 200
 globBatteryLevelsIndex = 0  # index in the circular buffer.
@@ -201,35 +196,50 @@ globBatteryLevelsIndex = 0  # index in the circular buffer.
 # When the batteries are charged, the battery voltage is irregular.
 # To measure this we store the battery voltage in a numpy array and determine the standard deviation.
 # Assumption is that this function is called about once in a second or less often.
-def checkCharging():
-    global globBatteryLevels, globBatteryLevelsIndex
+def updateBatteryInfo():
+    global globIsCharging, globBatteryLevels, globBatteryLevelsIndex
     charging = False
-    level = getBatteryLevel()
-    globBatteryLevels[globBatteryLevelsIndex] = level
+    updateBatteryLevel()
+    globBatteryLevels[globBatteryLevelsIndex] = globBatteryLevel
     globBatteryLevelsIndex = globBatteryLevelsIndex + 1
     if globBatteryLevelsIndex >= 30:
         globBatteryLevelsIndex = 0
     # If standard deviation of numpy array with battery levels > 2.0 then the batteries are being charged.
     if np.std(globBatteryLevels) > 2.0:
         charging = True
-    return charging
+    globIsCharging = charging
 
 
-def testCheckCharging():
-    while True:
-        print checkCharging()
-        time.sleep(1.0)
+def updateDistanceInfo():
+    global globDistance
+    distance = own_gpio.getUsSensorDistance(0)
+    # distance can be 0 which means invalid. In that case do not update globDistance.
+    if (distance != 0):
+        globDistance = distance
 
 
-def getUptime():
+def updateWifiStatus():
+    global globWifiLevel
+    stdOutAndErr = runShellCommandWait('/sbin/iwconfig')
+    # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
+    expr = re.compile('.*ESSID:"(.*)".*?Signal level=(.*dBm)', re.DOTALL)
+    m = expr.match(stdOutAndErr)
+    if m is not None:  # m will be not None only when both capture groups are valid.
+        globWifiLevel =  m.group(1) + ': ' + m.group(2)
+    else:
+        globWifiLevel = 'wifi unknown'
+
+
+def updateUptime():
+    global globUptime
     stdOutAndErr = runShellCommandWait('/usr/bin/uptime')
     # Use DOTALL (so '.' will also match a newline character) because stdOutAndErr can be multiline.
     expr = re.compile('.*up ([^,]+).*', re.DOTALL)
     m = expr.match(stdOutAndErr)
     if m is not None:
-        return m.group(1)
+        globUptime = m.group(1)
     else:
-        return 'unknown'
+        globUptime = 'unknown'
 
 
 def uploadAndPurge(filepath, nrOfFilesToKeep):

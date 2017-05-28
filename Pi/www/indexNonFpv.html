@@ -1,46 +1,218 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
-<html>
-<head>
-    <title>DFRobot control</title>
+<html><head>
+  <title></title>
 </head>
-<body>
-<div style="position: absolute; top: 0px; left: 0px;"> <iframe id="frame1" src="index1.html" align="left" frameborder="0" height="600" scrolling="yes" width="400"></iframe>
-</div>
-<div style="position: absolute; top: 600px; left: 0px;"> <iframe id="frame2" src="index2.html" align="left" frameborder="0" height="150" scrolling="yes" width="400"></iframe>
-</div>
-
+<body style="color: rgb(0, 0, 0); background-color: rgb(153, 255, 153);">
+<!-- The form below is to be able to submit this form from javascript with a delay, used when switching video streams. -->
+<form id = myForm>
+</form>
+    
+<img src="images/DFRobot.jpg">
+    
 <div style="position: absolute; top: 0px; left: 400px;"> <iframe id="cam" src="" height="600" width="800"></iframe></div>
 
-<div style="position: absolute; top: 0px; left: 410px;">
-    <p id="error message"></p>
-</div>
+<div d="error message" style="position: absolute; top: 0px; left: 410px;"></div>
 
-<div style="position: absolute; top: 700px; left: 5px;">
-    <audio controls>
-        <source id="audioSrc" src="" type="audio/ogg">
-    </audio>
-</div>
+<div style="font-size: 24px; position: absolute; top: 600px; left: 50px;"><b>status:</b></div>
+<div id="message1" style="font-size: 24px; position: absolute; top: 600px; left: 140px;"></div>
+    
+<div id= "myAudio" style="position: absolute; top: 700px; left: 5px;"></div>
+    
 
-<script>
-    // Below we generate the video stream url and the audio stream url.
-    // This url is deducted from the url of this page.
-    // The assumption is that the video stream port number is one higher and the audio stream port number two higher than the port number of this page.
-    var urlStr = document.URL; // url of this page.
-    urlStr = urlStr.replace(/[^\/]*$/, ""); // strip off indexNonFpv.html
-    var patt = /:([0-9]+)/; // regular expression to filter out the portnumber from the url.
-    if (patt.test(urlStr) == true) {
-        // Execute the regular expression.
-        // The result will contain the last matched characters in index 0 an the first parenthesized substring match in index 1.
-        var res = patt.exec(urlStr);
-        var portNumberPlusOne = (parseInt(res[1]) + 1).toString(); // the first parenthesized substring matches is in index 1
-        var portNumberPlusTwo = (parseInt(res[1]) + 2).toString(); // the first parenthesized substring matches is in index 1
-        var newUrlStrPlusOne = urlStr.replace(res[1],portNumberPlusOne);
-        var newUrlStrPlusTwo = urlStr.replace(res[1],portNumberPlusTwo);
-        document.getElementById("cam").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
-        document.getElementById("audioSrc").src = newUrlStrPlusTwo; // url of the audio stream page
-    } else {
-        //document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
+<button onclick='move("forward")' style="width: 100px; height: 100px; position: absolute; left: 150px; top: 30px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);">&#8593;</button>
+<button onclick='move("left")' style="width: 100px; height: 100px; position: absolute; left: 50px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);">&#8592;</button>
+<button onclick='move("right")' style="width: 100px; height: 100px; position: absolute; left: 250px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);">&#8594;</button>
+<button onclick='move("backward")' style="width: 100px; height: 100px; position: absolute; left: 150px; top: 230px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);">&#8595;</button>
+<button onclick='webSocketSendAndSubmitFormWithDelay("start-stream-hq")' style="width: 25px; height: 25px; position: absolute; left: 50px; top: 268px; background-color: rgb(255, 255, 0);"></button>
+<button onclick='webSocketSendAndSubmitFormWithDelay("start-stream-lq")' style="width: 25px; height: 25px; position: absolute; left: 75px; top: 268px; background-color: rgb(255, 147, 0);"></button>
+<button onclick='webSocketSend("stop-stream")' style="width: 25px; height: 25px; position: absolute; left: 100px; top: 268px; background-color: rgb(0, 0, 0);"></button>
+<button onclick='webSocketSend("cam-move-rel.30")' style="width: 25px; height: 25px; position: absolute; left: 50px; top: 368px; background-color: rgb(255, 147, 0);"></button>
+<button onclick='webSocketSend("cam-move-rel.-30")' style="width: 25px; height: 25px; position: absolute; left: 100px; top: 368px; background-color: rgb(255, 147, 0);"></button>
+<button onclick='webSocketSend("sound")' style="width: 25px; height: 25px; position: absolute; left: 188px; top: 368px; background-color: rgb(255, 147, 0);"></button>
+<button onclick='webSocketSend("light-on")' style="width: 25px; height: 25px; position: absolute; left: 275px; top: 266px; background-color: rgb(255, 255, 0);"></button>
+<button onclick='webSocketSend("light-off")' style="width: 25px; height: 25px; position: absolute; left: 325px; top: 266px; background-color: rgb(0, 0, 0);"></button>
+<button onclick="toggleSpeed(this)" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 130px; font-size: 24px; font-weight: bold; background-color: rgb(255, 0, 0);">fast</button>
+<button onclick='webSocketSend("capture-start")' style="width: 25px; height: 25px; position: absolute; left: 50px; top: 525px; background-color: rgb(255, 255, 0);"></button>
+<button onclick='webSocketSend("capture-stop")' style="width: 25px; height: 25px; position: absolute; left: 100px; top: 525px; background-color: rgb(0, 0, 0);"></button>
+<button onclick='webSocketSendAndSubmitFormWithDelay("home-start")' style="width: 25px; height: 25px; position: absolute; left: 275px; top: 525px; background-color: rgb(0, 0, 255);"></button>
+<button onclick='webSocketSend("home-stop")' style="width: 25px; height: 25px; position: absolute; left: 325px; top: 525px; background-color: rgb(0, 0, 255);"></button>
+    
+<div style="font-size: 24px; position: absolute; top: 235px; left: 50px;"><b>camera</b></div>
+<div style="font-size: 24px; position: absolute; top: 298px; left: 55px;"><b>h</b></div>
+<div style="font-size: 24px; position: absolute; top: 298px; left: 82px;"><b>l</b></div>
+<div style="font-size: 24px; position: absolute; top: 298px; left: 100px;"><b>off</b></div>
+<div style="font-size: 24px; position: absolute; top: 398px; left: 50px;"><b>up</b></div>
+<div style="font-size: 24px; position: absolute; top: 398px; left: 90px;"><b>down</b></div>
+
+<div style="font-size: 24px; position: absolute; top: 235px; left: 290px;"><b>light</b></div>
+<div style="font-size: 24px; position: absolute; top: 298px; left: 275px;"><b>on</b></div>
+<div style="font-size: 24px; position: absolute; top: 298px; left: 325px;"><b>off</b></div>
+
+<div style="font-size: 24px; position: absolute; top: 398px; left: 168px;"><b>sound</b></div>
+
+<div style="font-size: 24px; position: absolute; top: 490px; left: 30px;"><b>video capture</b></div>
+<div style="font-size: 24px; position: absolute; top: 555px; left: 50px;"><b>on</b></div>
+<div style="font-size: 24px; position: absolute; top: 555px; left: 100px;"><b>off</b></div>
+<div style="font-size: 24px; position: absolute; top: 490px; left: 285px;"><b>home</b></div>
+<div style="font-size: 24px; position: absolute; top: 555px; left: 275px;"><b>on</b></div>
+<div style="font-size: 24px; position: absolute; top: 555px; left: 325px;"><b>off</b></div>
+
+<!-- The input field will send the typed text through the Websocket connection. -->
+<div style="position: absolute; top: 445px; left: 50px;"><input onkeypress=if(event.keyCode==13)webSocketSend(this.value) size="20" style="font-size: 25px; color: rgb(136, 136, 136);" value="DFRobot command" onfocus="inputFocus(this)" onblur="inputBlur(this)" type="text"></div>
+    
+<script language="javascript" type="text/javascript">
+// Below we generate the video stream url and the audio stream url.
+// This url is deducted from the url of this page.
+// The assumption is that the video stream port number is one higher and the audio stream port number two higher than the port number of this page.
+var urlStr = document.URL; // url of this page.
+urlStr = urlStr.replace(/[^\/]*$/, ""); // strip off indexNonFpv.html
+var patt = /:([0-9]+)/; // regular expression to filter out the portnumber from the url.
+if (patt.test(urlStr) == true) {
+    // Execute the regular expression.
+    // The result will contain the last matched characters in index 0 an the first parenthesized substring match in index 1.
+    var res = patt.exec(urlStr);
+    var portNumberPlusOne = (parseInt(res[1]) + 1).toString(); // the first parenthesized substring matches is in index 1
+    var portNumberPlusTwo = (parseInt(res[1]) + 2).toString(); // the first parenthesized substring matches is in index 1
+    var newUrlStrPlusOne = urlStr.replace(res[1],portNumberPlusOne);
+    var newUrlStrPlusTwo = urlStr.replace(res[1],portNumberPlusTwo);
+    document.getElementById("cam").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
+    // Create the audio control. We do this with Javascript as we need to calculate the audio URL (newUrlStrPlusTwo) first.
+    var audio = new Audio(newUrlStrPlusTwo);
+    audio.controls = true;
+    document.getElementById("myAudio").appendChild(audio);
+} else {
+    document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
+}
+
+    
+function webSocketSetup(ws)
+{
+    if ("WebSocket" in window)
+    {               				
+        ws.onopen = function()
+        {
+            // Web Socket is connected, send data using send()
+            //ws.send("Websocket connected!");
+            ws.send("Websocket connected!");
+        };
+				
+        ws.onmessage = function (evt) 
+        { 
+            var received_msg = evt.data;
+            document.getElementById("message1").innerHTML = received_msg;
+        };
+				
+        ws.onclose = function()
+        { 
+            // websocket is closed.
+        };
     }
+            
+    else
+    {
+        // The browser doesn't support WebSocket
+        alert("WebSocket NOT supported by your Browser!");
+    }
+}
+    
+     
+function webSocketSend(msg)
+{
+    ws.send(msg);    
+}
+    
+    
+// Let us open a web socket
+var ws = new WebSocket("ws://192.168.1.42:44447/ws");
+webSocketSetup(ws)
+
+    
+const deltaTime = 100;
+var speed = "fast";
+var speedDrive = "72";
+var speedTurn = "32";
+    
+    
+function toggleSpeed(elem) {
+    if(speed == "slow") {
+        speed = "fast";
+        speedDrive = "72"
+        speedTurn = "32"
+        elem.style.backgroundColor="red";
+        elem.value="fast";
+    }
+    else {
+        speed = "slow";
+        speedDrive = "12"
+        speedTurn = "7"
+        elem.style.backgroundColor="green";
+        elem.value="slow";
+    }
+}
+    
+    
+function setSpeedDrive(elem) {
+    var str = elem.value;
+    // Take first part of button value, before the dot.
+    var valueArray = str.split(".");
+    // Add the speed to the button value.
+    elem.value = valueArray[0] + "." + speedDrive;
+}
+    
+    
+function setSpeedTurn(elem) {
+    var str = elem.value;
+    // Take first part of button value, before the dot.
+    var valueArray = str.split(".");
+    // Add the speed to the button value.
+    elem.value = valueArray[0] + "." + speedTurn;
+}
+    
+    
+function inputFocus(i){
+    if(i.value==i.defaultValue){ i.value=""; i.style.color="#000"; }
+}
+    
+    
+function inputBlur(i){
+    if(i.value==""){ i.value=i.defaultValue; i.style.color="#888"; }
+}
+    
+    
+function move(direction) {
+    if (direction == "forward") {
+        webSocketSend("drive-and-turn.63.0." + speedDrive.toString() + ".0");
+    }
+    else if (direction == "left") {
+        webSocketSend("drive-and-turn.0.-63.0." + speedTurn.toString());
+    }
+    else if (direction == "right") {
+        webSocketSend("drive-and-turn.0.63.0." + speedTurn.toString());
+    }
+    else if (direction == "backward") {
+        webSocketSend("drive-and-turn.-63.0." + speedDrive.toString() + ".0");
+    }
+}
+
+// Call webSocketSend("ws-alive") every x ms to indicate the connection is still alive.
+setInterval(function(){ 
+    // Code goes here that will be run every x ms.
+    webSocketSend("ws-alive");
+}, 500);
+
+    
+function webSocketSendAndSubmitFormWithDelay(stream)
+{
+    webSocketSend(stream);
+    formSubmitWithDelay(1000);
+}
+    
+function formSubmitWithDelay(delay){
+    setInterval(
+        function(){ document.getElementById("myForm").submit(delay) }, 1000
+    );
+}
+    
 </script>
     
 </body></html>

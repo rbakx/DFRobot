@@ -5,6 +5,10 @@ import shutil
 import sys
 import thread
 import socket
+import tornado.httpserver
+import tornado.websocket
+import tornado.ioloop
+import tornado.web
 import re
 import logging
 import time
@@ -15,9 +19,9 @@ import secret
 
 
 # Global variables
-globInteractive = False
+globWebSocketInteractive = False
+globWebSocketInMsg = ''
 globDoHomeRun = False
-globCmd = ''
 
 
 def TelegramClient():
@@ -50,9 +54,6 @@ def TelegramClient():
             else:
                 globTelegramMsgOutAvailableLock.release()
             
-            # Update charging status of batteries.
-            own_util.checkCharging()
-
             # Handle messages.
             msg = receiveTelegramMsg()
             if msg != "":
@@ -154,135 +155,52 @@ def receiveTelegramMsg():
     return msg
 
 
-def socketServer():
-    global globSocketMsgIn, globSocketMsgInAvailable, globSocketMsgInAvailableLock
-    global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
-    global globInteractive, globDoHomeRun
-    global globCmd
-    # We use a UDP socket here as we send small control commands and real time data.
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)         # Create a socket object.
-    port = 42420 # Reserve a port for your service.
-    s.bind(('', port)) # Bind to any host and specific port.
-    # Set socket timeout to prevent the s.accept() call from blocking.
-    # Instead it will generate a 'timed out' exception.
-    s.settimeout(1.0)
-    interactiveInactivityCount = 0
+def statusUpdateThread():
     while True:
-        try:
-            # Establish connection.
-            # We have set s.settimeout(...) which means s.recvfrom() will generate a 'timed out' exception
-            # when there is no message received within the timeout time.
-            # This way we can still do some processing.
-            msg = None
-            try:
-                # Receive message.
-                msg, addr = s.recvfrom(1024)  # Will receive any message with a maximum length of 1024 characters.
-            except Exception,e:
-                pass
-
-            # Increase interactive inactivity count.
-            interactiveInactivityCount = interactiveInactivityCount + 1
-            if interactiveInactivityCount > 60:
-                # Interactive is inactive, set globInteractive to False so the server can take appropriate action,
-                # for example continue motion detection.
-                globInteractive = False
-
-            if not msg:
-                # No message received, continue with next iteration.
-                continue
-
-            # Message is received, so interactive mode is active,
-            # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
-            globInteractive = True
-            # Reset interactive inacivity count because there is activity.
-            interactiveInactivityCount = 0
-
-            # Keep critical section as short as possible.
-            globSocketMsgInAvailableLock.acquire()
-            globSocketMsgIn = msg
-            globSocketMsgInAvailable = True
-            globSocketMsgInAvailableLock.release()
-
-            # Handle messages.
-            # receiveSocketMsg() which has a locking mechanism is used to handle the message.
-            # Running in this thread this would not be needed but it might be in the future.
-            msg = receiveSocketMsg()
-            # First handle the commands which change the run mode. The mode is set here in this thread
-            # so the mode can be changed or interrupted at any time in the other thread.
-            # For all messages received send a message back as the other side might expect this.
-            if re.search('home-start', msg, re.IGNORECASE):
-                sendSocketMsg('ok')
-                globCmd = 'home-start'
-                globDoHomeRun = True
-            elif re.search('home-stop', msg, re.IGNORECASE):
-                sendSocketMsg('ok')
-                globCmd = 'home-stop'
-                globDoHomeRun = False
-            elif re.search('status', msg, re.IGNORECASE):
-                # Get status for webpage.
-                if own_util.checkCharging() == True:
-                    chargingStr = 'charging'
-                else:
-                    chargingStr = 'not charging'
-                statusForWebPage = '<br>' + own_util.getWifiStatus() + '<br>' + 'uptime: ' + own_util.getUptime() + '<br>' + 'battery: ' + str(own_util.getBatteryLevel()) + ' (154 = 6V), ' + chargingStr
-                sendSocketMsg(statusForWebPage)
-            else:
-                # Handle the interactive commands which take at most a few seconds and do not change the mode.
-                sendSocketMsg('ok')
-                m = re.search('(.*)', msg, re.IGNORECASE)
-                if m is not None:
-                    globCmd = m.group(1)
-
-            # Send message.
-            # This must be done at the end of this loop iteration because one iteration consists of
-            # a 'read message' - 'compose response' - 'send response' sequence.
-            # This because the client expects an immediate answer otherwise it will block.
-            # Keep critical section as short as possible.
-            globSocketMsgOutAvailableLock.acquire()
-            if globSocketMsgOutAvailable == True:
-                msg = globSocketMsgOut
-                globSocketMsgOutAvailable = False
-                globSocketMsgOutAvailableLock.release()
-                # Add new line as other side will stop reading after a newline.
-                s.sendto(msg + '\n', addr)
-            else:
-                globSocketMsgOutAvailableLock.release()
-
-        except Exception,e:
-            logging.getLogger("MyLog").info('socketServer exception: ' + str(e))
+        own_util.updateUptime()
+        own_util.updateBatteryInfo()
+        own_util.updateWifiStatus()
+        own_util.updateDistanceInfo()
+        # Wait for next status update. Keep this sleep time equal to the personal_assistant.waitForProximity() update time.
+        time.sleep(0.5)
 
 
-def startSocketServer():
-    global globSocketMsgIn, globSocketMsgInAvailable, globSocketMsgInAvailableLock
-    global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
-    logging.getLogger("MyLog").info('going to start socketServer')
-    globSocketMsgInAvailableLock = thread.allocate_lock()
-    globSocketMsgOutAvailableLock = thread.allocate_lock()
-    globSocketMsgInAvailable = False
-    globSocketMsgOutAvailable = False
-    thread.start_new_thread(socketServer, ())
+class WebSocketHandler(tornado.websocket.WebSocketHandler):
+    previousBatteryLevel = 0
+    previousDistance = 0
+    previousWifiLevel = 0
+    def open(self):
+        logging.getLogger("MyLog").info("New websocket connection")
+    
+    def on_message(self, message):
+        global globWebSocketInteractive, globWebSocketInMsg, globDoHomeRun
+        globWebSocketInteractive = True
+        globWebSocketInMsg = str(message) # message received is Unicode. Convert back to ASCII.
+        # During a home-run the standard command handler in run_dfrobot.py does not run.
+        # However we still want to detect a home-stop command, so we check this here.
+        if globWebSocketInMsg == "home-stop":
+            globDoHomeRun = False
+        # Send back message
+        if own_util.globBatteryLevel != self.previousBatteryLevel or own_util.globWifiLevel != self.previousWifiLevel or own_util.globDistance != self.previousDistance:
+            self.write_message("bat: " + str(own_util.globBatteryLevel) + "<br>" + str(own_util.globWifiLevel) + "<br>dis: " + str(own_util.globDistance))
+            self.previousBatteryLevel = own_util.globBatteryLevel
+            self.previousDistance = own_util.globDistance
+            self.previousWifiLevel = own_util.globWifiLevel
+    
+    def on_close(self):
+        logging.getLogger("MyLog").info("Websocket closed")
+    
+    def check_origin(self, origin):
+        return True
 
 
-def receiveSocketMsg():
-    global globSocketMsgIn, globSocketMsgInAvailable, globSocketMsgInAvailableLock
-    msg = ''
-    # Keep critical section as short as possible.
-    globSocketMsgInAvailableLock.acquire()
-    if globSocketMsgInAvailable:
-        msg = globSocketMsgIn
-        globSocketMsgInAvailable = False
-        logging.getLogger("MyLog").info('Socket message received: "' + msg + '"')
-        globSocketMsgInAvailableLock.release()
-    else:
-        globSocketMsgInAvailableLock.release()
-    return msg
+def startWebSocketServer():
+    application = tornado.web.Application([(r'/ws', WebSocketHandler),])
+    http_server = tornado.httpserver.HTTPServer(application)
+    http_server.listen(44447)
+    myIP = socket.gethostbyname(socket.gethostname())
+    logging.getLogger("MyLog").info('*** Websocket Server Started at %s***' % myIP)
+    thread.start_new_thread(tornado.ioloop.IOLoop.instance().start, ())
 
 
-def sendSocketMsg(msg):
-    global globSocketMsgOut, globSocketMsgOutAvailable, globSocketMsgOutAvailableLock
-    # Keep critical section as short as possible.
-    globSocketMsgOutAvailableLock.acquire()
-    globSocketMsgOut = msg
-    globSocketMsgOutAvailable = True
-    logging.getLogger("MyLog").info('Socket message sent: "' + msg + '"')
-    globSocketMsgOutAvailableLock.release()
+

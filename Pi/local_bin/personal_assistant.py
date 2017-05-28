@@ -28,7 +28,6 @@ FirCoeff = signal.firwin(29, 4000.0/NyquistFrequency, pass_zero=False)
 # Global variables
 globInteractive = False
 globDoHomeRun = False
-globDistance = 1000
 globProximityCount = 0
 globCmd = ''
 globVolumeVoice = '90%'  # Volume used for voice responses.
@@ -183,7 +182,7 @@ def waitForClaps():
 # This function waits for an event like the proximity event or alarm and returns when the event has occurred.
 def waitForProximity():
     global globAlarmStatus, globAlarm
-    global globDistance, globProximityCount
+    global globProximityCount
     while True:
         # Check for alarm event.
         if globAlarmStatus == 'SET' and datetime.datetime.now().time() > datetime.time(*globAlarm):
@@ -195,7 +194,7 @@ def waitForProximity():
         # Only consider the 'first' n times to prevent new events occurring when for example a hand is kept in front of the robot.
         # Do not check for proximity during a Home run, this because during a Home run the proximity to objects can be small.
         if globDoHomeRun == False:
-            if globDistance > 0.0 and globDistance < 20.0:
+            if own_util.globDistance > 0.0 and own_util.globDistance < 20.0:
                 globProximityCount = globProximityCount + 1
                 if globProximityCount == 2:
                     # Proximity event detected!
@@ -205,7 +204,7 @@ def waitForProximity():
                     # Use pkill -f with regular expression to kill the right vlc process.
                     stdOutAndErr = own_util.runShellCommandWait('sudo pkill -f "vlc -I.*alsa"')
                     return
-            elif globDistance >= 20.0:
+            elif own_util.globDistance >= 20.0:
                 globProximityCount = 0;
         # No proximity detected, so microphone will not be used by the Personal Assistent to record local speech.
         # This means the micropone audio stream for the DFRobot webpage can be enabled.
@@ -223,16 +222,8 @@ def waitForProximity():
         if int(stdOutAndErr) < 3:  # 1 extra line is found because of grep command itself and 1 extra line because of the stdOutAndErr output ending with a newline.
             stdOutAndErr = own_util.runShellCommandNowait('cvlc alsa://hw:1,0 --sout \'#transcode{acodec= s16le,channels=1,samplerate=16000}:standard{access=http,mux=ogg,dst=:44446}\'')
 
-        # Sleep to enable other threads to run. The sleep time can be the same as used in the proximityLoop.
-        time.sleep(0.1)
-
-
-def proximityLoop():
-    global globDistance
-    while True:
-        # Check for proximity event.
-        globDistance = own_gpio.getUsSensorDistance(0)
-        time.sleep(0.1)  # Wait for the echo to damp out.
+        # Sleep to enable other threads to run. Keep this sleep time equal to the own_util.globDistance update time defined in own_util.statusUpdateThread().
+        time.sleep(0.5)
 
 
 def initMicrophone():
@@ -619,7 +610,7 @@ def handleIntent(intent, value, client):
         elif intent =="greet":
             response = 'hi there!'
         elif intent == "battery":
-            if own_util.checkCharging() == True:
+            if own_util.globIsCharging == True:
                 response = 'I am charging, my battery level is ' + str(own_util.getBatteryLevel())
             else:
                 response = 'I am not charging, my battery level is ' + str(own_util.getBatteryLevel())
@@ -648,9 +639,6 @@ def handleIntent(intent, value, client):
             globCmd = tmpCmd
             # set globInteractive to True so the server can take appropriate action, for example stop motion detection.
             globInteractive = True
-            # Sleep to give server time to start the command. Then set globInteractive to False again.
-            time.sleep(1.0)
-            globInteractive = False
     except Exception,e:
         logging.getLogger("MyLog").info('handleIntent exception: ' + str(e))
         # Switch off the loudspeaker if it is still on.
@@ -725,6 +713,5 @@ def startPersonalAssistant():
     initMicrophone()
     initLoudspeaker()
     thread.start_new_thread(personalAssistant, ())
-    # Start thread for measuring distance using the ultrasonic sensor. A seperate thread is needed because measuring distance is time critical.
-    thread.start_new_thread(proximityLoop, ())
+
 

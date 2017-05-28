@@ -88,7 +88,7 @@ def calibrateCompass():
     # Turn around a few times to make sure all angles are measured.
     for i in range(300):
         (x_out_raw, y_out_raw, z_out_raw, x_out, y_out, raw_degrees, degrees) = readCompass(True)
-        own_util.move('right', 128, 0.2, True)
+        own_util.move('right', 1, 0.2, True)
         if x_out_raw_min > x_out_raw:
             x_out_raw_min = x_out_raw
         if x_out_raw_max < x_out_raw:
@@ -121,18 +121,18 @@ def gotoDegreeAbs(targetDegree, doMove):
     while abs(diffAngle) > 1.0:
         if diffAngle > 0:
             if abs(diffAngle) < 20:
-                own_util.move('right', 128, 1.0, True)
+                own_util.move('right', 1, 1.0, True)
             elif abs(diffAngle) < 50:
-                own_util.move('right', 140, 1.0, True)
+                own_util.move('right', 12, 1.0, True)
             else:
-                own_util.move('right', 160, 1.0, True)
+                own_util.move('right', 32, 1.0, True)
         else:
             if abs(diffAngle) < 20:
-                own_util.move('left', 128, 1.0, True)
+                own_util.move('left', 1, 1.0, True)
             elif abs(diffAngle) < 50:
-                own_util.move('left', 140, 1.0, True)
+                own_util.move('left', 12, 1.0, True)
             else:
-                own_util.move('left', 160, 1.0, True)
+                own_util.move('left', 32, 1.0, True)
         currentDegree = readCompass()
         diffAngle = targetDegree - currentDegree
         if diffAngle > 180:

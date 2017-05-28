@@ -7,20 +7,16 @@
 <div style="position: absolute; top: 0px; left: 0px;"> <iframe id="cam1" src="" height="600" width="800"></iframe></div>
 <div style="position: absolute; top: 0px; left: 800px;"> <iframe id="cam2" src="" height="600" width="800"></iframe></div>
     
-<div style="position: absolute; top: 0px; left: 200px;">
-    <p id="error message"></p>
-</div>
-<div style="font-size: 48px; color:yellow; position: absolute; top: 100px; left: 400px;">
-    <p id="message1"></p>
-</div>
+<div id="error message" style="position: absolute; top: 0px; left: 300px;"></div>
+<div id="message1" style="font-size: 48px; color:yellow; position: absolute; top: 50px; left: 300px;"></div>
+<div id="message2" style="font-size: 48px; color:yellow; position: absolute; top: 150px; left: 300px;"></div>
+<div id="message3" style="font-size: 48px; color:yellow; position: absolute; top: 250px; left: 300px;"></div>
     
-<form action="/cgi-bin/dfrobot.sh" method="POST" style="display: none">
-    <button id="button-fpv-alive" name="cmd" value="fpv-alive"></button>
-    <button id="button-tilt" name="cmd" value="cam-move-abs.0"></button>
-    <button id="button-forward" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 30px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="drive-inc.31"></button>
-    <button id="button-left" style="width: 100px; height: 100px; position: absolute; left: 50px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="turn-inc.-31"></button>
-    <button id="button-right" style="width: 100px; height: 100px; position: absolute; left: 250px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="turn-inc.31"></button>
-    <button id="button-backward" style="width: 100px; height: 100px; position: absolute; left: 150px; top: 230px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);" name="cmd" value="drive-inc.-31"></button>
+<form style="display: none">
+    <button onclick='webSocketSend("drive-inc.31")' style="width: 100px; height: 100px; position: absolute; left: 150px; top: 30px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);"></button>
+    <button onclick='webSocketSend("turn-inc.-31")' style="width: 100px; height: 100px; position: absolute; left: 50px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);"></button>
+    <button onclick='webSocketSend("turn-inc.31")' style="width: 100px; height: 100px; position: absolute; left: 250px; top: 130px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);"></button>
+    <button onclick='webSocketSend("drive-inc.-31")' style="width: 100px; height: 100px; position: absolute; left: 150px; top: 230px; font-size: 32px; font-weight: bold; background-color: rgb(0, 255, 191);"></button>
 </form>
 
     
@@ -47,6 +43,49 @@ if (patt.test(urlStr) == true) {
     document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
 }
 
+    
+function webSocketSetup(ws)
+{
+    if ("WebSocket" in window)
+    {               				
+        ws.onopen = function()
+        {
+            // Web Socket is connected, send data using send()
+            //ws.send("Websocket connected!");
+            ws.send("Websocket connected!");
+        };
+				
+        ws.onmessage = function (evt) 
+        { 
+            var received_msg = evt.data;
+            document.getElementById("message1").innerHTML = received_msg;
+        };
+				
+        ws.onclose = function()
+        { 
+            // websocket is closed.
+        };
+    }
+            
+    else
+    {
+        // The browser doesn't support WebSocket
+        alert("WebSocket NOT supported by your Browser!");
+    }
+}
+    
+    
+function webSocketSend(msg)
+{
+    ws.send(msg);    
+}
+    
+    
+// Let us open a web socket
+var ws = new WebSocket("ws://192.168.1.42:44447/ws");  
+webSocketSetup(ws)
+
+    
 const countDownDelay = 15000;
 const deltaTime = 100;
 var previousDecoupledAlpha = 0; // For left - right motion.
@@ -95,61 +134,60 @@ function deviceOrientationHandler(event) {
             if (skipCount == 0) {
                 if (alphaDelta > 2.0) {
                     // valid left movement.
-                    document.getElementById("message1").innerHTML = "left";
+                    document.getElementById("message3").innerHTML = "left";
                     skipCount = 10;
-                    document.getElementById("button-left").click();
+                    webSocketSend("turn-inc.-31");
                 }
                 else if (alphaDelta < -2.0) {
                     // valid right movement.
-                    document.getElementById("message1").innerHTML = "right";
+                    document.getElementById("message3").innerHTML = "right";
                     skipCount = 10;
-                    document.getElementById("button-right").click();
+                    webSocketSend("turn-inc.31");
                 }
                 else if (gammaDelta > 4.0) {
                     // valid down movement.
-                    document.getElementById("message1").innerHTML = "down";
+                    document.getElementById("message3").innerHTML = "down";
                     skipCount = 10;
-                    document.getElementById("button-backward").click();
+                    webSocketSend("drive-inc.-31");
                 }
                 else if (gammaDelta < -4.0) {
                     // valid up movement.
-                    document.getElementById("message1").innerHTML = "up";
+                    document.getElementById("message3").innerHTML = "up";
                     skipCount = 10;
-                    document.getElementById("button-forward").click();
+                    webSocketSend("drive-inc.31");
                 }
                 else {
-                    document.getElementById("message1").innerHTML = "active";
+                    document.getElementById("message3").innerHTML = "active";
                     // No other movement is executed, so tilt camera if needed.
                     // Calculate the tilt to move the robot camera up and down.
                     // The tilt is only valid from horizontal position to 90 degrees upwards corresponding to 0 .. 3.
                     cameraTilt = Math.round(Math.round(Math.max(90 - decoupledGamma, 0)) / 10) * 10; // cameraTilt = 0,10,20...90
                     if (cameraTilt != cameraPreviousTilt) {
-                        document.getElementById("button-tilt").value = "cam-move-abs." + cameraTilt.toString();
-                        document.getElementById("button-tilt").click();
+                        webSocketSend("cam-move-abs." + cameraTilt.toString());
                         cameraPreviousTilt = cameraTilt;
                     }
-                    //else {
-                        //document.getElementById("button-fpv-alive").click();
-                    //}
+                    else {
+                        webSocketSend("ws-alive");
+                    }
                 }
             }
             else {
                 // We are skipping some FPV frames to give the user time to move his head back.
-                // We have still to send the "fpv-alive" message.
-                //document.getElementById("button-fpv-alive").click();
+                // We have still to send the "ws-alive" message.
+                webSocketSend("ws-alive");
                 skipCount = skipCount - 1;
             }
         }
         else {
-            document.getElementById("message1").innerHTML = "not active";
+            document.getElementById("message3").innerHTML = "not active";
         }
         previousTime = newTime;
         previousDecoupledAlpha = decoupledAlpha;
-        previousDecoupledGamma = decoupledGamma;        
+        previousDecoupledGamma = decoupledGamma;   
     }
     else if (newTime - firstTime < countDownDelay) {
         // Count down.
-        document.getElementById("message1").innerHTML = "countdown: " + Math.round((countDownDelay - (newTime - firstTime)) / 1000);
+        document.getElementById("message3").innerHTML = "countdown: " + Math.round((countDownDelay - (newTime - firstTime)) / 1000);
         // Assign previous values until countdown is finished to prevent robot from moving immediately after countdown.
         previousTime = newTime;
         previousDecoupledAlpha = decoupledAlpha;
@@ -158,7 +196,7 @@ function deviceOrientationHandler(event) {
     // fpvActive is used to activate FPV control. When the VR headset is facing downwards, fpvActive is false.
     fpvActive = !(Math.abs(event.gamma) < 45 && Math.abs(event.beta) < 90);
 }
-
+    
 if (window.DeviceOrientationEvent) {
         window.addEventListener('deviceorientation', deviceOrientationHandler, false);
 }

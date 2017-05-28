@@ -113,8 +113,10 @@ def homeRun():
 
     # Indicate to communication and personal_assistant modules that a Home run is started.
     # Both modules can stop the Home run by setting globDoHomeRun to False.
-    communication.globDoHomeRun = True;
-    personal_assistant.globDoHomeRun = True
+    if communication.globWebSocketInteractive == True:
+        communication.globDoHomeRun = True
+    elif personal_assistant.globInteractive == True:
+        personal_assistant.globDoHomeRun = True
     while globContinueCapture == True and (communication.globDoHomeRun == True or personal_assistant.globDoHomeRun == True):
         # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
@@ -365,7 +367,7 @@ def captureAndMotionDetection():
     pictureCountDown = 0
     lightSwitchedOn = False
     while globContinueCapture == True:
-        if communication.globInteractive == True or personal_assistant.globInteractive == True:
+        if communication.globWebSocketInteractive == True or personal_assistant.globInteractive == True:
             if doPrint:
                 print 'stopping capture and motion detection because the interactive mode is active'
             globMyLog.info('stopping capture and motion detection because the interactive mode is active')
@@ -549,6 +551,7 @@ def captureAndMotionDetection():
     globMyLog.info(stdOutAndErr)
     return True
 
+
 def createMyLog(path):
     global globMyLog
     globMyLog = logging.getLogger("MyLog")
@@ -601,11 +604,14 @@ globMyLog.info('START LOG  *****')
 communication.startTelegramClient()
 communication.sendTelegramMsg('I am up and running!')
 
-# Start Socket server.
-communication.startSocketServer()
+# Start websocket server.
+communication.startWebSocketServer()
 
 # Start personal assistant.
 personal_assistant.startPersonalAssistant()
+
+# Start status update thread.
+thread.start_new_thread(communication.statusUpdateThread, ())
 
 streamStarted = False
 mode = 'DEFAULT'
@@ -616,31 +622,37 @@ maxSpeed = 62
 minSpeed = -62
 turnSpeedFactorWhenStandingStill = 1.5
 prevSpeedStraight = 0
-lastTimeFpvConnectionAlive = 0.0
+lastTimeInteractiveMode = 0
+lastTimeWsConnectionAlive = 0
 while True:
     # Catch exceptions and log them.
     try:
-        # Short sleep to preempt this thread. Otherwise this thread will be dominating and other threads
-        # like the socketServer thread will not run at regular times.
+        # Short sleep to preempt this thread. Otherwise this thread will be dominating and other threads.
         time.sleep(0.001)
-        if communication.globInteractive == True or personal_assistant.globInteractive == True:
-            
-            # Check if FPV mode is active and if FPV connection with robot is still alive. If not stop driving!
-            #if lastTimeFpvConnectionAlive != 0:
-            #if time.time() - lastTimeFpvConnectionAlive > 1.0: # If time since last alive message > 1 second.
-                    #own_util.driveAndTurn(0, 0, 0, 0, 0, doMove)   # Stop driving.
-                    #prevSpeedStraight = 0
+        
+        if communication.globWebSocketInteractive == True or personal_assistant.globInteractive == True:
+            # Check if FPV mode is active and if FPV connection with robot is still alive. If not stop motors!
+            if lastTimeWsConnectionAlive != 0:
+                if time.time() - lastTimeWsConnectionAlive > 1.0: # If time since last alive message > 1 second.
+                    globMyLog.info('FPV connection timeout, stopping motors')
+                    own_util.driveAndTurn(0, 0, 0, 0, 0, doMove)   # Stop motors.
+                    prevSpeedStraight = 0
+                    # Motors are stopped, set lastTimeWsConnectionAlive to 0 to stop checking until the next FPV cmd is received.
+                    lastTimeWsConnectionAlive = 0
 
             # Intearctive command received. This command looks like "drive-and-turn.0.31".
             # The below regular expression will separate the command on the dots so the result will be an tuple ["drive-and-turn", "0", "31"].
             expr = re.compile('(.+?)(?:$|\.)')
-            if communication.globInteractive == True:
-                cmdList = expr.findall(communication.globCmd)
-            else:
+            cmdList = []
+            if communication.globWebSocketInteractive == True and len(cmdList) == 0: # Only execute when len(cmdList) == 0 meaning still no valid cmd received.
+                cmdList = expr.findall(communication.globWebSocketInMsg)
+            if personal_assistant.globInteractive == True and len(cmdList) == 0:     # Only execute when len(cmdList) == 0 meaning still no valid cmd received.
                 cmdList = expr.findall(personal_assistant.globCmd)
             # Now cmdList is a a list containing the cmd and its parameters. The cmdList[0] contains the command.
             # If there are no parameters len(cmdList) == 1.
             if len(cmdList) > 0:
+                # Valid command received meaning the interactive mode is (still) active, so update lastTimeInteractiveMode.
+                lastTimeInteractiveMode = time.time()
                 if doPrint:
                     print 'command received:', str(cmdList)
                 globMyLog.info('command received: ' + str(cmdList))
@@ -671,9 +683,9 @@ while True:
                 elif cmdList[0] == 'stop-fpv':
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
-                    globMyLog.info('going to stop lq stream')
+                    globMyLog.info('going to start lq stream')
                     if doPrint:
-                        print 'going to stop fpv stream'
+                        print 'going to start lq stream'
                     time.sleep(0.5)
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 elif cmdList[0] == 'stop-stream':
@@ -706,7 +718,7 @@ while True:
                         print 'Going to start Home run'
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
-                    globMyLog.info('going to start stream')
+                    globMyLog.info('going to start lq stream')
                     time.sleep(0.5)
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                     # Delay to give stream time to start up and camera to stabilize.
@@ -716,24 +728,24 @@ while True:
                     communication.sendTelegramVideo('/home/pi/DFRobotUploads/dfrobot_video.avi', 'Here is your homerun video!')
                 elif cmdList[0] in ['forward', 'backward', 'left', 'right']:
                     own_util.move(cmdList[0], int(cmdList[1]), 0, doMove)
-                elif cmdList[0] == 'fpv-alive':
-                    lastTimeFpvConnectionAlive = time.time()
+                elif cmdList[0] == 'ws-alive':
+                    lastTimeWsConnectionAlive = time.time()
                 elif cmdList[0] == 'drive-inc':
                     # Calculate new speed and keep it between minSpeed and maxSpeed.
                     newSpeedStraight = max(min(prevSpeedStraight + int(cmdList[1]), maxSpeed), minSpeed)
                     own_util.driveAndTurn(newSpeedStraight, 0, 0, 0, 0, doMove) # Drive straight ahead.
                     prevSpeedStraight = newSpeedStraight
-                    lastTimeFpvConnectionAlive = time.time()
+                    lastTimeWsConnectionAlive = time.time()
                 elif cmdList[0] == 'turn-inc':
                     turnSpeed = int(cmdList[1])
                     if prevSpeedStraight == 0:
                         # When standing still a higher turning speed is needed.
                         turnSpeed = int(int(cmdList[1]) * turnSpeedFactorWhenStandingStill)
                     own_util.driveAndTurn(prevSpeedStraight, turnSpeed, 0, 60, 0, doMove)
-                    lastTimeFpvConnectionAlive = time.time()
-                elif cmdList[0] == 'drive-and-turn': # Not used at the moment but left in for illustration.
-                    own_util.driveAndTurn(cmdList[1], cmdList[2], 0, 0, 0, doMove);
-                    lastTimeFpvConnectionAlive = time.time()
+                    lastTimeWsConnectionAlive = time.time()
+                elif cmdList[0] == 'drive-and-turn':
+                    own_util.driveAndTurn(cmdList[1], cmdList[2], cmdList[3], cmdList[4], 0, doMove);
+                    lastTimeWsConnectionAlive = time.time()
                 elif cmdList[0] == 'cam-move-rel':
                     own_util.moveCamRel(int(cmdList[1]), 0.1)
                 elif cmdList[0] == 'cam-move-abs':
@@ -756,7 +768,7 @@ while True:
                         print 'going to start Home run'
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
-                    globMyLog.info('going to start stream')
+                    globMyLog.info('going to start lq stream')
                     time.sleep(0.5)
                     own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                     # Delay to give stream time to start up and camera to stabilize.
@@ -781,15 +793,21 @@ while True:
                     mode = 'STOP'
 
                 # Command handled, so make empty.
-                communication.globCmd = ''
+                communication.globWebSocketInMsg = ''
                 personal_assistant.globCmd = ''
+            else:
+                # len(cmdList) == 0 so  no valid command is received.
+                # Check if interactive mode is still active since the last minute, otherwise set it to inactive so the default mode (captureAndMotionDetection) can run again.
+                if time.time() - lastTimeInteractiveMode > 60:
+                    communication.globWebSocketInteractive = False
+                    personal_assistant.globInteractive = False
     
         elif mode == 'DEFAULT':
             # Default mode runs means captureAndMotionDetection mode. This mode stops when there is interaction.
             if streamStarted == False:
                 # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                 stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
-                globMyLog.info('going to start stream')
+                globMyLog.info('going to start lq default stream')
                 own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 # Delay to give stream time to start up and camera to stabilize.
                 time.sleep(5)
@@ -836,7 +854,6 @@ while True:
                 if doPrint:
                     print 'going to stop patrol'
             mode = 'DEFAULT'
-
 
     except Exception,e:
         globMyLog.info('run_dfrobot exception: ' + str(e))
