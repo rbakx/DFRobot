@@ -21,7 +21,6 @@ import secret
 # Global variables
 globWebSocketInteractive = False
 globWebSocketInMsg = ''
-globDoHomeRun = False
 
 
 def TelegramClient():
@@ -173,13 +172,13 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         logging.getLogger("MyLog").info("New websocket connection")
     
     def on_message(self, message):
-        global globWebSocketInteractive, globWebSocketInMsg, globDoHomeRun
+        global globWebSocketInteractive, globWebSocketInMsg
         globWebSocketInteractive = True
         globWebSocketInMsg = str(message) # message received is Unicode. Convert back to ASCII.
-        # During a home-run the standard command handler in run_dfrobot.py does not run.
-        # However we still want to detect a home-stop command, so we check this here.
-        if globWebSocketInMsg == "home-stop":
-            globDoHomeRun = False
+        # During a Home run the standard command handler in run_dfrobot.py does not run.
+        # So we indicate here a stop command is received by setting own_util.globStop to True.
+        if globWebSocketInMsg == "stop":
+            own_util.globStop = True
         # Send back message
         if own_util.globBatteryLevel != self.previousBatteryLevel or own_util.globWifiLevel != self.previousWifiLevel or own_util.globDistance != self.previousDistance:
             self.write_message("bat: " + str(own_util.globBatteryLevel) + "<br>" + str(own_util.globWifiLevel) + "<br>dis: " + str(own_util.globDistance))

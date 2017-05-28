@@ -111,13 +111,10 @@ def homeRun():
     if globBrightness < 60:
         own_util.switchLight(True)
 
-    # Indicate to communication and personal_assistant modules that a Home run is started.
-    # Both modules can stop the Home run by setting globDoHomeRun to False.
-    if communication.globWebSocketInteractive == True:
-        communication.globDoHomeRun = True
-    elif personal_assistant.globInteractive == True:
-        personal_assistant.globDoHomeRun = True
-    while globContinueCapture == True and (communication.globDoHomeRun == True or personal_assistant.globDoHomeRun == True):
+    # Indicate that a Home run is started.
+    # A Home run can be stopped by setting own_util.globStop to True.
+    own_util.globDoHomeRun = True
+    while globContinueCapture == True and own_util.globStop == False:
         # Keep critical section as short as possible.
         globNewImageAvailableLock.acquire()
         newImageAvailable = globNewImageAvailable
@@ -133,8 +130,8 @@ def homeRun():
             # The default value of params.thresholdStep (10?) seems to work well.
             # To speed processing up, increase to 20 or more.
             #params.thresholdStep = 20
-            params.minThreshold = 20;
-            params.maxThreshold = 200;
+            params.minThreshold = 20
+            params.maxThreshold = 200
 
             # Filter by Area.
             # This prevents that many small blobs (one pixel) will be detected.
@@ -328,8 +325,7 @@ def homeRun():
 
     # Stop the getNewImage thread and indicate Home run is finished.
     globContinueCapture = False
-    communication.globDoHomeRun = False
-    personal_assistant.globDoHomeRun = False
+    own_util.globDoHomeRun = False
     # Move cam down again.
     own_util.moveCamAbs(0, 0.1)
     # Switch off light if it was on.
@@ -612,10 +608,8 @@ personal_assistant.startPersonalAssistant()
 
 # Start status update thread.
 thread.start_new_thread(communication.statusUpdateThread, ())
-
 streamStarted = False
-mode = 'DEFAULT'
-prevMode = 'DEFAULT'
+
 # FPV vatiables
 # Take rounded values of maxSpeed and minSpeed such that rounded increments and decrements will pass the '0' value so we can stop the robot exactly.
 maxSpeed = 62
@@ -631,6 +625,7 @@ while True:
         time.sleep(0.001)
         
         if communication.globWebSocketInteractive == True or personal_assistant.globInteractive == True:
+            # Interactive mode.
             # Check if FPV mode is active and if FPV connection with robot is still alive. If not stop motors!
             if lastTimeWsConnectionAlive != 0:
                 if time.time() - lastTimeWsConnectionAlive > 1.0: # If time since last alive message > 1 second.
@@ -744,7 +739,7 @@ while True:
                     own_util.driveAndTurn(prevSpeedStraight, turnSpeed, 0, 60, 0, doMove)
                     lastTimeWsConnectionAlive = time.time()
                 elif cmdList[0] == 'drive-and-turn':
-                    own_util.driveAndTurn(cmdList[1], cmdList[2], cmdList[3], cmdList[4], 0, doMove);
+                    own_util.driveAndTurn(cmdList[1], cmdList[2], cmdList[3], cmdList[4], 0, doMove)
                     lastTimeWsConnectionAlive = time.time()
                 elif cmdList[0] == 'cam-move-rel':
                     own_util.moveCamRel(int(cmdList[1]), 0.1)
@@ -781,16 +776,18 @@ while True:
                     startTimePatrol = time.time()
                     if doPrint:
                         print 'going to start patrol'
-                    mode = 'PATROL'
-                    # Switch on light if needed
-                    if globBrightness < 60:
-                        own_util.switchLight(True)
-                    own_util.move('forward', 72, 1.0, doMove)
-                    own_util.move('forward', 72, 1.0, doMove)
-                    own_util.driveAndTurn(63, 0, 0, 0, doMove)
-                elif cmdList[0] == 'stop':
-                    prevMode = mode
-                    mode = 'STOP'
+                # A stop command can interrupt a previous command like a Home run.
+                # The stop command does not come in through the regular cmdList[0] but from own_util.globStop which is set by the input handlers.
+                # This because the command handler here is busy with the previous command which has to be stopped.
+                # After a previous command is stopped we check for the stop command to stop the motors, lights, etc..
+                if own_util.globStop == True:
+                    globMyLog.info('going to stop action')
+                    if doPrint:
+                        print 'going to stop action'
+                    own_util.driveAndTurn(0, 0, 0, 0, 0, doMove)
+                    own_util.switchLight(False)
+                    # Indicate stop command has been handled.
+                    own_util.globStop = False
 
                 # Command handled, so make empty.
                 communication.globWebSocketInMsg = ''
@@ -802,8 +799,9 @@ while True:
                     communication.globWebSocketInteractive = False
                     personal_assistant.globInteractive = False
     
-        elif mode == 'DEFAULT':
-            # Default mode runs means captureAndMotionDetection mode. This mode stops when there is interaction.
+        else:
+            # Non interactive mode.
+            # Switch to captureAndMotionDetection. This mode stops when there is interaction.
             if streamStarted == False:
                 # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                 stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
@@ -830,30 +828,6 @@ while True:
                 # the stream can be switched by an interactive user.
                 # Stop MJPEG stream. Use sudo because stream can be started by another user.
                 streamStarted = False
-
-        # Handle non default modes
-        if mode == 'PATROL':
-            # Check timeout of patrol mode.
-            if time.time() - startTimePatrol > 30:
-                prevMode = mode
-                mode = 'STOP'
-            elif personal_assistant.globDistance > 0 and personal_assistant.globDistance < 20:
-                prevMode = mode
-                mode = 'STOP'
-            elif personal_assistant.globDistance > 0 and personal_assistant.globDistance < 60:
-                own_util.move('left', 72, 1.0, doMove)
-            else:
-                own_util.driveAndTurn(63, 0, 0, 0, doMove)
-        elif mode == 'STOP':
-            globMyLog.info('going to stop action')
-            if doPrint:
-                print 'going to stop action'
-            own_util.driveAndTurn(0, 0, 0, 0, doMove)
-            own_util.switchLight(False)
-            if prevMode == 'PATROL':
-                if doPrint:
-                    print 'going to stop patrol'
-            mode = 'DEFAULT'
 
     except Exception,e:
         globMyLog.info('run_dfrobot exception: ' + str(e))

@@ -27,7 +27,6 @@ FirCoeff = signal.firwin(29, 4000.0/NyquistFrequency, pass_zero=False)
 
 # Global variables
 globInteractive = False
-globDoHomeRun = False
 globProximityCount = 0
 globCmd = ''
 globVolumeVoice = '90%'  # Volume used for voice responses.
@@ -161,7 +160,7 @@ def waitForClaps():
                     # As soon as this time is exceeded (clapCount == 0) we start over again.
                     if checkClaps(p1, p2, p3, p4, p5):
                         # Two claps are detected. Start checking for silence again.
-                        silenceCount = SilenceCountInPeriods;
+                        silenceCount = SilenceCountInPeriods
                         n = 0
                         doContinue1 = False
                         # Set clapCount to 0 to prevent jumping directly to detecting claps in case of a next iteration.
@@ -193,7 +192,7 @@ def waitForProximity():
         # The 'n' times is because the distance measurement occasionally shows wrong values.
         # Only consider the 'first' n times to prevent new events occurring when for example a hand is kept in front of the robot.
         # Do not check for proximity during a Home run, this because during a Home run the proximity to objects can be small.
-        if globDoHomeRun == False:
+        if own_util.globDoHomeRun == False:
             if own_util.globDistance > 0.0 and own_util.globDistance < 20.0:
                 globProximityCount = globProximityCount + 1
                 if globProximityCount == 2:
@@ -205,7 +204,7 @@ def waitForProximity():
                     stdOutAndErr = own_util.runShellCommandWait('sudo pkill -f "vlc -I.*alsa"')
                     return
             elif own_util.globDistance >= 20.0:
-                globProximityCount = 0;
+                globProximityCount = 0
         # No proximity detected, so microphone will not be used by the Personal Assistent to record local speech.
         # This means the micropone audio stream for the DFRobot webpage can be enabled.
         # It was tried to start the microphone audio stream only after the user clicks a 'Mic' button on the DFRobot webpage.
@@ -500,7 +499,7 @@ def query(queryStr):
 #  - "text" for handling the intent and corresponding action for a person connected via Telegram with the robot.
 # Returns a text response.
 def handleIntent(intent, value, client):
-    global globInteractive, globDoHomeRun, globCmd
+    global globInteractive, globCmd
     global globAlarmStatus, globAlarm
     global globVolumeVoice, globVolumeAlarm, globVolumeMusic
     global globDoMotionDetection, globTelegramSendPicture
@@ -545,21 +544,20 @@ def handleIntent(intent, value, client):
             if value == "start":
                 tmpCmd = 'demo-start'
                 response = 'demo activated'
-                globDoHomeRun = True
         elif intent == "patrol":
             if value == "start":
                 tmpCmd = 'patrol-start'
                 response = 'patrol activated'
-                globDoHomeRun = True
         elif intent == "stop":
+            # During a Home run the standard command handler in run_dfrobot.py does not run.
+            # So we indicate here a stop command is received by setting own_util.globStop to True.
+            own_util.globStop = True
             tmpCmd = 'stop'
             response = 'stopped'
-            globDoHomeRun = False
         elif intent == "home":
             if value == "start":
                 tmpCmd = 'home-start'
                 response = 'going home'
-                globDoHomeRun = True
         elif intent == "news":
             if value == "world":
                 d = feedparser.parse('http://www.ed.nl/cmlink/1.3280365')
@@ -648,7 +646,6 @@ def handleIntent(intent, value, client):
 
 # Let the robot be a personal assistant.
 def personalAssistant():
-    global globDoHomeRun
     global globAlarmStatus
     global globVolumeVoice, globVolumeAlarm, globVolumeMusic
     own_gpio.switchOnLoudspeaker()
@@ -660,7 +657,7 @@ def personalAssistant():
             # Wait for the claps event, proximity event or alarm. These functions contain a sleep to enable other threads to run.
             # Choose waitForClaps() or waitForProximity() below.
             waitForProximity()
-            # Event occurred. An event can be for example two claps to request a servie, two claps to interrupt an action or an alarm.
+            # Proximity detected.
             # 'eventHandled' is used to check whether the event is handled or not.
             eventHandled = False
             # Check if the previous command is still running. If so, kill it and continue waiting for the next trigger sound.
@@ -683,9 +680,6 @@ def personalAssistant():
                 setVolumeLoudspeaker(globVolumeAlarm)
                 own_util.runShellCommandNowait('/usr/local/bin/own_gpio.py --loudspeaker on;/usr/bin/mplayer /home/pi/Sources/alarm.mp3;/usr/local/bin/own_gpio.py --loudspeaker off')
                 globAlarmStatus = ''  # reset alarm
-                eventHandled = True   # Indicate the event is handled.
-            if globDoHomeRun == True:
-                globDoHomeRun = False
                 eventHandled = True   # Indicate the event is handled.
             # If event is handled already here, continue to wait for the next event.
             if eventHandled == True:

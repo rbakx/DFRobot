@@ -19,6 +19,8 @@ globBatteryLevel = 0
 globIsCharging = False
 globWifiLevel = 0
 globDistance = 1000
+globDoHomeRun = False
+globStop = False
 
 
 # runShellCommandWait(cmd) will block until 'cmd' is finished.
