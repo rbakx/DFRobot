@@ -7,7 +7,7 @@
 <div style="position: absolute; top: 0px; left: 0px;"> <iframe id="cam1" src="" height="600" width="800"></iframe></div>
 <div style="position: absolute; top: 0px; left: 800px;"> <iframe id="cam2" src="" height="600" width="800"></iframe></div>
     
-<div id="error message" style="position: absolute; top: 0px; left: 300px;"></div>
+<div id="error message" style="position: absolute; top: 10px; left: 300px;"></div>
 <div id="message1" style="font-size: 48px; color:yellow; position: absolute; top: 50px; left: 300px;"></div>
 <div id="message2" style="font-size: 48px; color:yellow; position: absolute; top: 150px; left: 300px;"></div>
 <div id="message3" style="font-size: 48px; color:yellow; position: absolute; top: 250px; left: 300px;"></div>
@@ -25,9 +25,12 @@
 // The eventlisteners defined are called immediately after the event occurs.
 // Below we generate the video stream url and the audio stream url.
 // This url is deducted from the url of this page.
-// The assumption is that the video stream port number is one higher and the audio stream port number two higher than the port number of this page.
-var urlStr = document.URL; // url of this page.
-urlStr = urlStr.replace(/[^\/]*$/, ""); // strip off indexFpv.html
+// The assumption is that the video stream port number is one higher, the audio stream port number two higher
+// and the websocket port number is three higher than the port number of this page.
+var urlStr;
+var webSocketUrlStr;
+urlStr = document.URL; // url of this page.
+urlStr = urlStr.replace(/[^\/]*$/, ""); // strip off part after last /.
 var patt = /:([0-9]+)/; // regular expression to filter out the portnumber from the url.
 if (patt.test(urlStr) == true) {
     // Execute the regular expression.
@@ -35,12 +38,15 @@ if (patt.test(urlStr) == true) {
     var res = patt.exec(urlStr);
     var portNumberPlusOne = (parseInt(res[1]) + 1).toString(); // the first parenthesized substring matches is in index 1
     var portNumberPlusTwo = (parseInt(res[1]) + 2).toString(); // the first parenthesized substring matches is in index 1
+    var portNumberPlusThree = (parseInt(res[1]) + 3).toString(); // the first parenthesized substring matches is in index 1
     var newUrlStrPlusOne = urlStr.replace(res[1],portNumberPlusOne);
     var newUrlStrPlusTwo = urlStr.replace(res[1],portNumberPlusTwo);
+    var newUrlStrPlusThree = urlStr.replace(res[1],portNumberPlusThree);
+    webSocketUrlStr = newUrlStrPlusThree.replace("http", "ws") + "ws";
     document.getElementById("cam1").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
     document.getElementById("cam2").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
 } else {
-    document.getElementById("error message").innerHTML = "cannot find video or audio stream url"; // write error message the to page
+    document.getElementById("error message").innerHTML = "cannot find correct port"; // write error message the to page
 }
 
     
@@ -82,7 +88,7 @@ function webSocketSend(msg)
     
     
 // Let us open a web socket
-var ws = new WebSocket("ws://192.168.1.42:44447/ws");  
+var ws = new WebSocket(webSocketUrlStr);  
 webSocketSetup(ws)
 
     

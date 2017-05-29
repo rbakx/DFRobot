@@ -7,13 +7,37 @@
 <!-- The form below is to be able to submit this form from javascript with a delay, used when switching video streams. -->
 <form id = myForm>
 </form>
-
+    
 <div style="position: absolute; top: 0px; left: 0px;"> <iframe id="frameTop" src="indexNonFpv.html" align="left" frameborder="0" height="750" scrolling="yes" width="1600"></iframe>
      
+<div id="error message" style="position: absolute; top: 10px; left: 300px;"></div>
+
 <button id="buttonFPV" onclick="switchToFPV(this)" style="width: 70px; height: 50px; position: absolute; left: 1530px; top: 550px; background-color: rgb(255, 255, 0);">start FPV</button> 
 
-    
+
 <script>
+// This script is executed each time after a page refresh, so then all variables are (re)created and initialized.
+// The eventlisteners defined are called immediately after the event occurs.
+// Below we generate the video stream url and the audio stream url.
+// This url is deducted from the url of this page.
+// The assumption is that the video stream port number is one higher, the audio stream port number two higher
+// and the websocket port number is three higher than the port number of this page.
+var urlStr;
+var webSocketUrlStr;
+urlStr = document.URL; // url of this page.
+urlStr = urlStr.replace(/[^\/]*$/, ""); // strip off part after last /.
+var patt = /:([0-9]+)/; // regular expression to filter out the portnumber from the url.
+if (patt.test(urlStr) == true) {
+    // Execute the regular expression.
+    // The result will contain the last matched characters in index 0 an the first parenthesized substring match in index 1.
+    var res = patt.exec(urlStr);
+    var portNumberPlusThree = (parseInt(res[1]) + 3).toString(); // the first parenthesized substring matches is in index 1
+    var newUrlStrPlusThree = urlStr.replace(res[1],portNumberPlusThree);
+    webSocketUrlStr = newUrlStrPlusThree.replace("http", "ws") + "ws";
+} else {
+    document.getElementById("error message").innerHTML = "cannot find correct port"; // write error message the to page
+}    
+
 // indexpage contains indexNonFpv.html or indexFpv.html and is used to switch between NonFpv and Fpv mode.
 // It is a localStorage item to have it persistent between page refreshes.
 // First make sure localStorage items are available.
@@ -81,7 +105,7 @@ function webSocketSend(msg)
     
     
 // Let us open a web socket
-var ws = new WebSocket("ws://192.168.1.42:44447/ws");  
+var ws = new WebSocket(webSocketUrlStr);  
 webSocketSetup(ws)
 
 
