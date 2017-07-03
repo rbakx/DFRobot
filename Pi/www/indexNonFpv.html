@@ -9,7 +9,7 @@
     
 <img src="images/DFRobot.jpg">
     
-<div style="position: absolute; top: 0px; left: 400px;"> <iframe id="cam" src="" height="600" width="800"></iframe></div>
+<div style="position: absolute; top: 0px; left: 400px;"> <iframe id="cam" src="" height="480" width="640"></iframe></div>
 
 <div id="error message" style="position: absolute; top: 10px; left: 300px;"></div>
 
@@ -211,12 +211,12 @@ setInterval(function(){
 function webSocketSendAndSubmitFormWithDelay(stream)
 {
     webSocketSend(stream);
-    formSubmitWithDelay(1000);
+    formSubmitWithDelay(2000);
 }
     
 function formSubmitWithDelay(delay){
     setInterval(
-        function(){ document.getElementById("myForm").submit(delay) }, 1000
+        function(){ document.getElementById("myForm").submit() }, delay
     );
 }
     

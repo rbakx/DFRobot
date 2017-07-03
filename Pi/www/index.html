@@ -8,11 +8,11 @@
 <form id = myForm>
 </form>
     
-<div style="position: absolute; top: 0px; left: 0px;"> <iframe id="frameTop" src="indexNonFpv.html" align="left" frameborder="0" height="750" scrolling="yes" width="1600"></iframe>
+<div style="position: absolute; top: 0px; left: 0px;"> <iframe id="frameTop" src="indexNonFpv.html" align="left" frameborder="0" height="800" width="1280" scrolling="no"></iframe>
      
 <div id="error message" style="position: absolute; top: 10px; left: 300px;"></div>
 
-<button id="buttonFPV" onclick="switchToFPV(this)" style="width: 70px; height: 50px; position: absolute; left: 1530px; top: 550px; background-color: rgb(255, 255, 0);">start FPV</button> 
+<button id="buttonFPV" onclick="switchToFPV(this)" style="width: 70px; height: 50px; position: absolute; left: 970px; top: 550px; background-color: rgb(255, 255, 0);">start FPV</button> 
 
 
 <script>
@@ -59,12 +59,12 @@ function switchToFPV(elem) {
     if (localStorage.getItem("indexPage") == "indexNonFpv.html") {
         localStorage.setItem('indexPage', "indexFpv.html")
         webSocketSend("start-fpv");
-        formSubmitWithDelay(1000);
+        formSubmitWithDelay(2000);
     }
     else {
         localStorage.setItem('indexPage', "indexNonFpv.html")
         webSocketSend("stop-fpv");
-        formSubmitWithDelay(1000);
+        formSubmitWithDelay(2000);
     }
 }
     
@@ -111,7 +111,7 @@ webSocketSetup(ws)
 
 function formSubmitWithDelay(delay){
     setInterval(
-        function(){ document.getElementById("myForm").submit(delay) }, 1000
+        function(){ document.getElementById("myForm").submit() }, delay
     );
 }
 

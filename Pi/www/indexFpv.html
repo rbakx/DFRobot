@@ -4,8 +4,7 @@
 </head>
 <body style="color: rgb(0, 0, 0); background-color: rgb(153, 255, 153);">
     
-<div style="position: absolute; top: 0px; left: 0px;"> <iframe id="cam1" src="" height="600" width="800"></iframe></div>
-<div style="position: absolute; top: 0px; left: 800px;"> <iframe id="cam2" src="" height="600" width="800"></iframe></div>
+<div style="position: absolute; top: 0px; left: 0px;"> <iframe id="cam1" src="" height="480" width="1280" scrolling="no"></iframe></div>
     
 <div id="error message" style="position: absolute; top: 10px; left: 300px;"></div>
 <div id="message1" style="font-size: 48px; color:yellow; position: absolute; top: 50px; left: 300px;"></div>
@@ -44,7 +43,6 @@ if (patt.test(urlStr) == true) {
     var newUrlStrPlusThree = urlStr.replace(res[1],portNumberPlusThree);
     webSocketUrlStr = newUrlStrPlusThree.replace("http", "ws") + "ws";
     document.getElementById("cam1").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
-    document.getElementById("cam2").src = newUrlStrPlusOne + "stream_simple.html"; // url of the video stream page
 } else {
     document.getElementById("error message").innerHTML = "cannot find correct port"; // write error message the to page
 }

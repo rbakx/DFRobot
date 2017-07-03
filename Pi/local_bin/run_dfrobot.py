@@ -658,7 +658,8 @@ while True:
                     if doPrint:
                         print 'going to start hq stream'
                     time.sleep(0.5)
-                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsHq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Resolution of PU` Aimetis HD USB Camera Module: 2560x960 or 1280x480
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_uvc.so -d /dev/video0 -f 20 -r 1280x480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 elif cmdList[0] == 'start-stream-lq':
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
@@ -666,7 +667,8 @@ while True:
                     if doPrint:
                         print 'going to start lq stream'
                     time.sleep(0.5)
-                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Resolution of PU` Aimetis HD USB Camera Module: 2560x960 or 1280x480
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_uvc.so -d /dev/video0 -f 20 -r 1280x480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 elif cmdList[0] == 'start-fpv':
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
@@ -674,7 +676,8 @@ while True:
                     if doPrint:
                         print 'going to start fpv stream'
                     time.sleep(0.5)
-                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsFpv) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Resolution of PU` Aimetis HD USB Camera Module: 2560x960 or 1280x480
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_uvc.so -d /dev/video0 -f 20 -r 1280x480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 elif cmdList[0] == 'stop-fpv':
                     # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
@@ -682,7 +685,8 @@ while True:
                     if doPrint:
                         print 'going to start lq stream'
                     time.sleep(0.5)
-                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Resolution of PU` Aimetis HD USB Camera Module: 2560x960 or 1280x480
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_uvc.so -d /dev/video0 -f 20 -r 1280x480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 elif cmdList[0] == 'stop-stream':
                     # Stop stream. Use sudo because stream can be started by another user.
                     globMyLog.info('going to stop stream')
@@ -715,7 +719,8 @@ while True:
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start lq stream')
                     time.sleep(0.5)
-                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Resolution of PU` Aimetis HD USB Camera Module: 2560x960 or 1280x480
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_uvc.so -d /dev/video0 -f 20 -r 1280x480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
@@ -765,7 +770,8 @@ while True:
                     stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                     globMyLog.info('going to start lq stream')
                     time.sleep(0.5)
-                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                    # Resolution of PU` Aimetis HD USB Camera Module: 2560x960 or 1280x480
+                    own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_uvc.so -d /dev/video0 -f 20 -r 1280x480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                     # Delay to give stream time to start up and camera to stabilize.
                     time.sleep(5)
                     homeRun()
@@ -806,7 +812,8 @@ while True:
                 # Start MJPEG stream. Stop previous stream first if any. Use sudo because stream can be started by another user.
                 stdOutAndErr = own_util.runShellCommandWait('sudo killall mjpg_streamer')
                 globMyLog.info('going to start lq default stream')
-                own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_raspicam.so -vf -hf -fps ' + str(FpsLq) + ' -q 10 -x ' + str(ImgWidth) + ' -y '+ str(ImgHeight) + '" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
+                # Resolution of PU` Aimetis HD USB Camera Module: 2560x960 or 1280x480
+                own_util.runShellCommandNowait('LD_LIBRARY_PATH=/opt/mjpg-streamer/mjpg-streamer-experimental/ /opt/mjpg-streamer/mjpg-streamer-experimental/mjpg_streamer -i "input_uvc.so -d /dev/video0 -f 20 -r 1280x480" -o "output_http.so -p 44445 -w /opt/mjpg-streamer/mjpg-streamer-experimental/www"')
                 # Delay to give stream time to start up and camera to stabilize.
                 time.sleep(5)
                 streamStarted = True

@@ -55,6 +55,10 @@ def TelegramClient():
             
             # Handle messages.
             msg = receiveTelegramMsg()
+            # Check for reboot command coming in via Telegram right here, other parts of the code might not run anymore.
+            if msg == "reboot":
+                own_util.ownReboot("reboot requested by user")
+                msg = ""  # Indicate message is handled.
             if msg != "":
                 (intent,value) = personal_assistant.textToIntent(msg)
                 response = personal_assistant.handleIntent(intent, value, "text")
@@ -175,6 +179,10 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         global globWebSocketInteractive, globWebSocketInMsg
         globWebSocketInteractive = True
         globWebSocketInMsg = str(message) # message received is Unicode. Convert back to ASCII.
+        # Check for reboot command coming in via the websocket right here, other parts of the code might not run anymore.
+        if globWebSocketInMsg == "reboot":
+            own_util.ownReboot("reboot requested by user")
+            globWebSocketInMsg = ""  # Indicate message is handled.
         # During a Home run the standard command handler in run_dfrobot.py does not run.
         # So we indicate here a stop command is received by setting own_util.globStop to True.
         if globWebSocketInMsg == "stop":
