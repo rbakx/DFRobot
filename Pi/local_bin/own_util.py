@@ -15,7 +15,8 @@ import own_gpio
 # Global variables.
 slaveAddressArduino = 0x04
 globUptime = 0
-globBatteryLevel = 0
+globExtPowerAvailable = False
+globIntPowerLevel = 0
 globIsCharging = False
 globWifiLevel = 0
 globDistance = 1000
@@ -175,41 +176,30 @@ def switchLight(on):
         i2c.globI2cLock.release()
 
 
-def updateBatteryLevel():
-    global globBatteryLevel
+def updatePowerInfo():
+    global globExtPowerAvailable, globIntPowerLevel
     # Create i2c lock if it does not exist yet.
     i2c.createI2cLock()
     # Lock i2c communication for this thread.
     i2c.globI2cLock.acquire()
     # Going to read I2C data.
-    i2c.write_byte(slaveAddressArduino, 0, 0)
-    globBatteryLevel = i2c.read_byte(slaveAddressArduino, 0)
+    # Read external power level. If the level > 100, we assume external power is available.
+    i2c.write_byte(slaveAddressArduino, 0, 100)  # Command to indicate a read is going to follow.
+    i2c.write_byte(slaveAddressArduino, 0, 128)  # 128 means read external power level.
+    if i2c.read_byte(slaveAddressArduino, 0) > 100:
+        globExtPowerAvailable = True
+    else:
+        globExtPowerAvailable = False
+    # Delay before retrieving the next power info.
+    time.sleep(i2c.globI2cDelay)
+    # Read internal power level. This power level can be from external power or the batteries.
+    i2c.write_byte(slaveAddressArduino, 0, 100)  # Command to indicate a read is going to follow.
+    i2c.write_byte(slaveAddressArduino, 0, 129)  # 129 means read internal power level.
+    globIntPowerLevel = i2c.read_byte(slaveAddressArduino, 0)
     # Delay for i2c communication.
     time.sleep(i2c.globI2cDelay)
     # Release i2c communication for this thread.
     i2c.globI2cLock.release()
-
-
-# Global variables used as static variables.
-# globBatteryLevels is a circular buffer of 30 battery values, initialized on battery level 200.
-globBatteryLevels = np.ones(30) * 200
-globBatteryLevelsIndex = 0  # index in the circular buffer.
-# The function below determines whether the batteries are being charged or not.
-# When the batteries are charged, the battery voltage is irregular.
-# To measure this we store the battery voltage in a numpy array and determine the standard deviation.
-# Assumption is that this function is called about once in a second or less often.
-def updateBatteryInfo():
-    global globIsCharging, globBatteryLevels, globBatteryLevelsIndex
-    charging = False
-    updateBatteryLevel()
-    globBatteryLevels[globBatteryLevelsIndex] = globBatteryLevel
-    globBatteryLevelsIndex = globBatteryLevelsIndex + 1
-    if globBatteryLevelsIndex >= 30:
-        globBatteryLevelsIndex = 0
-    # If standard deviation of numpy array with battery levels > 2.0 then the batteries are being charged.
-    if np.std(globBatteryLevels) > 2.0:
-        charging = True
-    globIsCharging = charging
 
 
 def updateDistanceInfo():

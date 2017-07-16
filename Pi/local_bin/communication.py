@@ -161,7 +161,7 @@ def receiveTelegramMsg():
 def statusUpdateThread():
     while True:
         own_util.updateUptime()
-        own_util.updateBatteryInfo()
+        own_util.updatePowerInfo()
         own_util.updateWifiStatus()
         own_util.updateDistanceInfo()
         # Wait for next status update. Keep this sleep time equal to the personal_assistant.waitForProximity() update time.
@@ -169,7 +169,8 @@ def statusUpdateThread():
 
 
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
-    previousBatteryLevel = 0
+    previousExtPowerAvailable = False
+    previousIntPowerLevel = 0
     previousDistance = 0
     previousWifiLevel = 0
     def open(self):
@@ -188,9 +189,14 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         if globWebSocketInMsg == "stop":
             own_util.globStop = True
         # Send back message
-        if own_util.globBatteryLevel != self.previousBatteryLevel or own_util.globWifiLevel != self.previousWifiLevel or own_util.globDistance != self.previousDistance:
-            self.write_message("bat: " + str(own_util.globBatteryLevel) + "<br>" + str(own_util.globWifiLevel) + "<br>dis: " + str(own_util.globDistance))
-            self.previousBatteryLevel = own_util.globBatteryLevel
+        if own_util.globExtPowerAvailable != self.previousExtPowerAvailable or own_util.globIntPowerLevel != self.previousIntPowerLevel or own_util.globWifiLevel != self.previousWifiLevel or own_util.globDistance != self.previousDistance:
+            if own_util.globExtPowerAvailable == True:
+                powerStr = "ext pow: "
+            else:
+                powerStr = "bat: "
+            self.write_message(powerStr + str(own_util.globIntPowerLevel) + "<br>" + str(own_util.globWifiLevel) + "<br>dis: " + str(own_util.globDistance))
+            self.previousExtPowerAvailable = own_util.globExtPowerAvailable
+            self.previousIntPowerLevel = own_util.globIntPowerLevel
             self.previousDistance = own_util.globDistance
             self.previousWifiLevel = own_util.globWifiLevel
     

@@ -13,17 +13,16 @@ int DIR1 = 7; // left motor
 int PWM1 = 6; // left motor
 int DIR2 = 4; // right motor
 int PWM2 = 5; // right motor
-int ANA0 = A0;
-// LIGHT and RESETCHARGE control the same relay
-int LIGHT = 2;
-int RESETCHARGE = 2;
-int SERVOCAMERA = 3;
+int EXT_POWER_SENSE_PIN = A0;
+int INT_POWER_SENSE_PIN = A1;
+int EXT_POWER_SWITCH_PIN = 2;
+int LIGHT_PIN = 3;
+int SERVO_CAMERA_PIN = 8;
 
-int i2cCommand = 0; // global variable for receiving command from I2C
-int i2cParameters[10]; // global array for receiving parameters from I2C
-int i2cParameterCount = 0; // global variable for keeping I2C parameter count
-int ana0Value = 0; // global variable for sending number to I2C
-unsigned long count = 0; // global variable counting the total number of loops
+int i2cCommand = 0;         // global variable for receiving command from I2C
+int i2cParameters[10];      // global array for receiving parameters from I2C
+int i2cParameterCount = 0;  // global variable for keeping I2C parameter count
+int i2cDataByteToSend = 0;  // global variable to send back over I2C in receiveData() callback fucntion.
 
 Servo myServo;  // create servo camera object to control a servo
 int servoCameraPos;   // variable to store the servo camera position
@@ -49,7 +48,7 @@ void receiveData(int byteCount)
 // callback for sending data
 void sendData()
 {
-  Wire.write(ana0Value / 4); // I2C only receives bytes, so map 0..1023 to 0..255.
+  Wire.write(i2cDataByteToSend); // Send data back over I2C.
 }
 
 // Left motor.
@@ -84,7 +83,8 @@ void setup()
 {
   pinMode(DIR1, OUTPUT);
   pinMode(DIR2, OUTPUT);
-  pinMode(RESETCHARGE, OUTPUT);
+  pinMode(EXT_POWER_SWITCH_PIN, OUTPUT);
+  pinMode(LIGHT_PIN, OUTPUT);
 
   // initialize i2c as slave
   Wire.begin(SLAVE_ADDRESS);
@@ -95,12 +95,37 @@ void setup()
 
   Serial.begin(9600);
   servoCameraPos = 0;
-  myServo.attach(SERVOCAMERA);   // Attaches the servocamera pin to the servo object.
-  myServo.write(servoCameraPos); // Put servocamera in start position.
+  myServo.attach(SERVO_CAMERA_PIN);   // Attaches the servocamera pin to the servo object.
+  myServo.write(servoCameraPos);      // Put servocamera in start position.
 }
 
 void loop()
 {
+  static boolean extPowerAvailable = false;
+  static unsigned long lastTimeWithoutExternalPowerMillis = 0; // Last time without external power in millis.
+  int extPowerLevel;  // External power level.
+  int intPowerLevel;  // Internal power level.
+
+  //  Read analog sense values
+  extPowerLevel = analogRead(EXT_POWER_SENSE_PIN);  // range [0..1023]
+  intPowerLevel = analogRead(INT_POWER_SENSE_PIN);  // range [0..1023]
+
+  // If external power is available, switch to external power.
+  // First check if external power is connected reliably for an amount of time.
+  if (extPowerLevel > 100) {
+    if (millis() - lastTimeWithoutExternalPowerMillis > 5000) {
+      // At least 5 seconds external power available, so switch to external power.
+      digitalWrite(EXT_POWER_SWITCH_PIN, HIGH);
+      extPowerAvailable = true;
+    }
+  }
+  else {
+    // No external power, update lastTimeWithoutExternalPowerMillis;.
+    lastTimeWithoutExternalPowerMillis = millis();
+    digitalWrite(EXT_POWER_SWITCH_PIN, LOW);
+    extPowerAvailable = false;
+  }
+
   switch (i2cCommand)
   {
     case 1: // Drive and turn, make a temporary turn while driving, used for autonomous control
@@ -126,6 +151,20 @@ void loop()
           directionBackward = false; // forward left wheels
           speedStraight = map(i2cParameters[0], 192, 255, 0, 255);
         }
+
+        // If robot is on external power, first switch to batteries.
+        // Because switching from external power to batteries is done by a relay, the robot only gets power from a capacitor during the switch.
+        // Therefore it is important to do this switching before the robot starts to drive, otherwise the capacitor will not have enough charge.
+        // When both speeds are zero (stop command), do not switch off external power. The stop command is sent when losing connection in FPV mode.
+        if (extPowerAvailable == true && (i2cParameters[0] != 192 || i2cParameters[1] != 192)) {
+          digitalWrite(EXT_POWER_SWITCH_PIN, LOW);
+          extPowerAvailable = false;
+          // Delay to make sure switch to battery power is done before the robot starts to drive.
+          // Make sure that after this delay the i2cParameters[...] are not used anymore because during the delay they can be overwritten by the receiveData() callback fuction.
+          delay(500);
+          lastTimeWithoutExternalPowerMillis = millis();  // To make sure external power is not reconnected if robot drives away slowly.
+        }
+
         if (speedTurn != 0) {
           // If we have to turn we do this first for turnDelay ms.
           int speed1 = speedStraight + speedTurn;
@@ -187,34 +226,28 @@ void loop()
       }
       break;
     case 20: // light on
-      digitalWrite(LIGHT, HIGH);
+      digitalWrite(LIGHT_PIN, HIGH);
       i2cCommand = 0;
       break;
     case 21: // light off
-      digitalWrite(LIGHT, LOW);
+      digitalWrite(LIGHT_PIN, LOW);
       i2cCommand = 0;
       break;
+    case 100: // Command to indicate a read is going to follow.
+      if (i2cParameterCount == 1) {
+        if (i2cParameters[0] == 128) {            // 128 means read external power level.
+          i2cDataByteToSend = extPowerLevel / 4;  // Map level [0..1023] to [0..255] so it fits in one byte.
+        }
+        else if (i2cParameters[0] == 129) {       // 129 means read internal power level. This power level can be from external power or the batteries.
+          i2cDataByteToSend = intPowerLevel / 4;  // Map level [0..1023] to [0..255] so it fits in one byte.
+        }
+        i2cCommand = 0;
+      }
+      break;
+
     default:
       break;
   }
 
-  ana0Value = analogRead(ANA0);
-
-  delay(100);
-  count = count + 1;
-  if (count == 72000)
-  {
-    // reset charge cycle every 2 hours
-    digitalWrite(RESETCHARGE, HIGH);
-    delay(2000);
-    digitalWrite(RESETCHARGE, LOW);
-    count = 0;
-  }
+  // No delay here as it will degrade I2C performance.
 }
-
-
-
-
-
-
-
