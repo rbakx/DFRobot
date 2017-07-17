@@ -113,8 +113,8 @@ void loop()
   // If external power is available, switch to external power.
   // First check if external power is connected reliably for an amount of time.
   if (extPowerLevel > 100) {
-    if (millis() - lastTimeWithoutExternalPowerMillis > 5000) {
-      // At least 5 seconds external power available, so switch to external power.
+    if (millis() - lastTimeWithoutExternalPowerMillis > 10000) {
+      // At least 10 seconds external power available, so switch to external power. The 10 seconds is needed for the robot to park properly in the garage.
       digitalWrite(EXT_POWER_SWITCH_PIN, HIGH);
       extPowerAvailable = true;
     }
