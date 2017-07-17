@@ -76,7 +76,7 @@ def move(direction, delayMove, delayAfterMove, doMove):
 # When speedTurn != 0 it first drives and turns for the specified delay an then continues driving straight ahead for the specified delay.
 # When speedTurn == 0 it only drives straight ahead for the specified delay.
 # speedStraight: [-63..63], where [-63..-1] means backward, 0 means zero speed and [1..63] means forward.
-# speedTurn:     [-63..63], where [-63..-1] means backward, 0 means zero speed and [1..63] means forward.
+# speedTurn:     [-63..63], where [-63..-1] means left, 0 means straight forward and [1..63] means right.
 # delayDrive: [0..127], where 0 means infinite, 1 means 50 ms and 127 means 1000 ms.
 # delayTurn:  [0..127], where 0 means infinite, 1 means 50 ms and 127 means 1000 ms.
 # delayAfterMove is used in autonomous mode to synchronize the python script with the movements and camera stabilization of the robot.

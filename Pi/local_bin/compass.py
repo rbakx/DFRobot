@@ -35,11 +35,11 @@ def readCompass(debug = False):
     # This calibration will result in x_out and y_out varying between -200 and +200.
     # Because the HMC5883L is not exactly linear or mounted exactly horizontal,
     # we apply an extra correction (offsetCorrectionAt180Degrees) at 180 degrees to straigten the curve.
-    x_factor = 1.01
-    x_offset = 139.39
-    y_factor = 1.01
-    y_offset = 107.03
-    rawDegreesAt180Degrees = 190.0
+    x_factor = 0.90
+    x_offset = 148.42
+    y_factor = 0.90
+    y_offset = 131.38
+    rawDegreesAt180Degrees = 172.0
     
     offsetCorrectionAt180Degrees = 180.0 - rawDegreesAt180Degrees
     
@@ -118,7 +118,7 @@ def gotoDegreeAbs(targetDegree, doMove):
         diffAngle = diffAngle + 360
     if doMove == False:
         return diffAngle
-    while abs(diffAngle) > 1.0:
+    while abs(diffAngle) > 2.0:
         if diffAngle > 0:
             if abs(diffAngle) < 20:
                 own_util.move('right', 1, 1.0, True)

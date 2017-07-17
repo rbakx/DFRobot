@@ -279,7 +279,9 @@ def homeRun():
                             own_util.move('forward', 12, 1.0, doMove)
                     else:
                         # Make one more additional move towards the garage before turning 180 degrees.
-                        own_util.move('forward',40, 1.0, doMove)
+                        # Switch off the light relay as its magnetic field influences the compass (can be 10 degrees difference)!!
+                        own_util.switchLight(False)
+                        own_util.move('forward',20, 1.0, doMove)
                         compass.gotoDegreeRel(180, doMove)
                         for i in range(0, 8):
                             own_util.move('backward', 12, 1.0, doMove)
