@@ -94,6 +94,7 @@ webSocketSetup(ws)
     
 const countDownDelay = 15000;
 const deltaTime = 100;
+const skipCountstart = 5;
 var previousDecoupledAlpha = 0; // For left - right motion.
 var previousDecoupledGamma = 0; // For up - down motion.
 var previousTime = 0;
@@ -136,30 +137,30 @@ function deviceOrientationHandler(event) {
     var newTime = new Date().getTime();
     if (newTime - firstTime > countDownDelay && newTime - previousTime > deltaTime) {
         if (fpvActive == true) {
-            // After a valid movement is measure skip will be set to true and deltaTime to a higher value to give the user chance to move his head back.
+            // After a valid movement skipCount is set to skipCountstart to give the user chance to move his head back.
             if (skipCount == 0) {
                 if (alphaDelta > 2.0) {
                     // valid left movement.
                     document.getElementById("message3").innerHTML = "left";
-                    skipCount = 10;
+                    skipCount = skipCountstart;
                     webSocketSend("turn-inc.-31");
                 }
                 else if (alphaDelta < -2.0) {
                     // valid right movement.
                     document.getElementById("message3").innerHTML = "right";
-                    skipCount = 10;
+                    skipCount = skipCountstart;
                     webSocketSend("turn-inc.31");
                 }
-                else if (gammaDelta > 4.0) {
+                else if (gammaDelta > 2.0) {
                     // valid down movement.
                     document.getElementById("message3").innerHTML = "down";
-                    skipCount = 10;
+                    skipCount = skipCountstart;
                     webSocketSend("drive-inc.-31");
                 }
-                else if (gammaDelta < -4.0) {
+                else if (gammaDelta < -2.0) {
                     // valid up movement.
                     document.getElementById("message3").innerHTML = "up";
-                    skipCount = 10;
+                    skipCount = skipCountstart;
                     webSocketSend("drive-inc.31");
                 }
                 else {
